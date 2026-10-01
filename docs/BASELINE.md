@@ -38,7 +38,8 @@ not on value. A fine-tuned model has to beat both rows.
 ## Observations
 
 - The model gave the same selector (`body > div:nth-of-type(2) > p:nth-of-type(1)`) for every
-  inspected sample, so selector 0% means a wrong element, not a formatting mismatch.
+  inspected sample. That selector is the example written in the prompt, so the model copied it.
+  Selector 0% means a wrong element, not a formatting mismatch.
   Exact selector matching stays for now.
 - In the current factory each bug type maps to one property (CLIPPING height, OVERFLOW width,
   OVERLAP margin-top) and every OVERLAP fix is `margin-top: 0px`. Property accuracy is mostly
