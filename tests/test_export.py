@@ -67,3 +67,12 @@ def test_export_splits_by_site_and_copies_images(tmp_path):
     assert [e["sample_id"] for e in train] == ["a_mobile_clipping_0", "a_mobile_clipping_1"]
     assert [e["sample_id"] for e in test] == ["b_mobile_clipping_0"]
     assert (out / "images" / "b_mobile_clipping_0.png").read_bytes() == b"png-b_mobile_clipping_0"
+
+
+def test_drop_duplicates_keeps_first_of_same_target_and_fix(tmp_path):
+    from forge.export import drop_duplicates
+
+    first = make_sample(tmp_path, "a_mobile_clipping_0", "a")
+    copy = make_sample(tmp_path, "a_mobile_clipping_1", "a")
+    other = make_sample(tmp_path, "b_mobile_clipping_0", "b")
+    assert drop_duplicates([first, copy, other]) == [first, other]
