@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -78,3 +79,45 @@ def build_dataset(
                         counts = report.accepted_by_type
                         counts[bug_type] = counts.get(bug_type, 0) + 1
     return report
+
+
+def parse_sites(items: Sequence[str]) -> dict[str, str]:
+    """Turn ['name=url', ...] into {'name': 'url'}, rejecting malformed entries."""
+    sites = {}
+    for item in items:
+        name, separator, url = item.partition("=")
+        if not separator or not name or not url:
+            raise ValueError(f"Expected NAME=URL, got {item!r}.")
+        sites[name] = url
+    return sites
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Build the UI-bug dataset.")
+    parser.add_argument("--site", action="append", required=True, metavar="NAME=URL")
+    parser.add_argument("--viewports", nargs="+", choices=sorted(VIEWPORTS))
+    parser.add_argument("--bug-types", nargs="+", choices=sorted(MUTATIONS))
+    parser.add_argument("--seeds", type=int, default=3, help="seeds 0..N-1 per combination")
+    parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
+    parser.add_argument("--out-dir", default="data/raw")
+    parser.add_argument("--samples", default="data/samples.jsonl")
+    args = parser.parse_args(argv)
+    try:
+        sites = parse_sites(args.site)
+    except ValueError as error:
+        parser.error(str(error))
+    report = build_dataset(
+        sites,
+        out_dir=args.out_dir,
+        samples_path=args.samples,
+        viewports=args.viewports,
+        bug_types=args.bug_types,
+        seeds=range(args.seeds),
+        threshold=args.threshold,
+    )
+    print(report.summary())
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
