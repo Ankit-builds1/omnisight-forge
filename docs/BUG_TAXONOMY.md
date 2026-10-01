@@ -52,8 +52,25 @@ Each mutation returns: `bug_type`, `target_selector`, `property`, `broken_css`,
 
 ## Quality filter
 
-Keep a sample only if the visual difference from the clean render exceeds a
-threshold (SSIM drop). Log how many samples are rejected per bug type.
+Keep a sample only if enough of the screenshot visibly changed. The score is the
+share of pixels that differ from the clean render by more than 8/255 in any colour
+channel. A sample needs a score of at least 0.0005 (0.05% of the screenshot).
+Log how many samples are rejected per bug type.
+
+Why not SSIM: it underweights small or flat-colour changes. On the first real run a
+vanished navbar heading scored 0.004 (it looked unchanged) while changing 0.15% of
+the pixels, so clearly visible bugs were rejected. The 0.0005 threshold comes from
+that evidence. The weakest accepted sample (a form label overlapping another label,
+0.057% of pixels) is clearly visible to a person.
+
+Visibility rule: a mutation may only target an element fully inside the initial
+viewport (top >= 0, bottom <= viewport height, left < viewport width). Screenshots
+cover the viewport only, so a bug below the fold is real in the DOM but invisible in
+the image.
+
+Stability: pages whose clean screenshots differ between two identical loads are
+excluded for now (the Bootstrap dashboard example has an animated chart). A
+stability gate is planned as a separate issue.
 
 ## Anti-cheat rules
 
@@ -71,5 +88,4 @@ and design-token-aware fixes.
 
 ## Open decisions (settle during v0.1)
 
-- The exact SSIM threshold for the quality filter.
 - Which real sites form the training set and which are held out for OOD tests.
