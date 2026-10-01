@@ -38,6 +38,28 @@ def to_example(sample: Sample) -> dict:
     }
 
 
+def drop_duplicates(samples: list[Sample]) -> list[Sample]:
+    """Keep the first sample per site, viewport, bug type, target and gold fix.
+
+    Two seeds can pick the same element with the same fix. The copy repeats a question
+    the model already has, and in the test set it would be counted twice.
+    """
+    seen = set()
+    unique = []
+    for sample in samples:
+        key = (
+            sample.site,
+            sample.viewport,
+            sample.bug_type,
+            sample.target_selector,
+            sample.gold_fix,
+        )
+        if key not in seen:
+            seen.add(key)
+            unique.append(sample)
+    return unique
+
+
 def export(
     samples: list[Sample], held_out_sites: list[str], out_dir: Path | str
 ) -> tuple[int, int]:
@@ -61,7 +83,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--out", default="data/export")
     args = parser.parse_args(argv)
 
-    n_train, n_test = export(read_samples(args.samples), args.held_out, args.out)
+    samples = read_samples(args.samples)
+    unique = drop_duplicates(samples)
+    print(f"dropped {len(samples) - len(unique)} duplicate samples")
+    n_train, n_test = export(unique, args.held_out, args.out)
     print(f"train={n_train} test={n_test} -> {args.out}")
 
 
