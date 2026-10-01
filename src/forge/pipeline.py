@@ -23,6 +23,11 @@ class Rejection:
     visual_diff_score: float | None = None
 
 
+def make_sample_id(site: str, viewport: str, bug_type: str, seed: int) -> str:
+    """Deterministic id, so reruns can recognise samples that already exist."""
+    return f"{site}_{viewport}_{bug_type.lower()}_{seed}"
+
+
 def generate_sample(
     url: str,
     site: str,
@@ -36,7 +41,7 @@ def generate_sample(
     if bug_type not in MUTATIONS:
         raise ValueError(f"Unknown bug type: {bug_type!r}.")
 
-    sample_id = f"{site}_{viewport}_{bug_type.lower()}_{seed}"
+    sample_id = make_sample_id(site, viewport, bug_type, seed)
     out = Path(out_dir)
     clean = capture_page(url, viewport=viewport, out_dir=out_dir, name=site)
     broken_png = out / f"{sample_id}_broken.png"
