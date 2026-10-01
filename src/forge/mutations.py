@@ -37,6 +37,9 @@ _JS_HELPERS = """
   const skip = new Set(
     ['HTML', 'HEAD', 'BODY', 'SCRIPT', 'STYLE', 'LINK', 'META', 'TITLE', 'NOSCRIPT']
   );
+  const inView = (r) => (
+    r.top >= 0 && r.bottom <= window.innerHeight && r.left < window.innerWidth
+  );
   const selectorFor = (el) => {
     const parts = [];
     let node = el;
@@ -62,7 +65,7 @@ _OVERFLOW_CANDIDATES_JS = """
     if (skip.has(el.tagName)) continue;
     const rect = el.getBoundingClientRect();
     const parentRect = el.parentElement.getBoundingClientRect();
-    if (rect.width < 20 || rect.height < 10 || parentRect.width <= 0) continue;
+    if (rect.width < 20 || rect.height < 10 || parentRect.width <= 0 || !inView(rect)) continue;
     out.push({
       selector: selectorFor(el),
       width: rect.width,
@@ -84,7 +87,7 @@ _OVERLAP_CANDIDATES_JS = """
     if (!prev || skip.has(prev.tagName)) continue;
     const rect = el.getBoundingClientRect();
     const prevRect = prev.getBoundingClientRect();
-    if (rect.width < 20 || rect.height < 10) continue;
+    if (rect.width < 20 || rect.height < 10 || !inView(rect)) continue;
     if (prevRect.width < 20 || prevRect.height < 10) continue;
     out.push({
       selector: selectorFor(el),
@@ -113,7 +116,7 @@ _CLIPPING_CANDIDATES_JS = """
     range.selectNodeContents(el);
     const contentHeight = range.getBoundingClientRect().height;
     const rect = el.getBoundingClientRect();
-    if (rect.width < 20 || contentHeight < 12) continue;
+    if (rect.width < 20 || contentHeight < 12 || !inView(rect)) continue;
     out.push({
       selector: selectorFor(el),
       contentHeight: contentHeight,
