@@ -31,15 +31,24 @@ class Mutation:
     gold_fix: str
 
 
-# JavaScript shared by every candidate search: skip non-visual tags and build a unique
-# CSS selector for an element from its position in the DOM.
+# JavaScript shared by every candidate search: skip non-visual tags, keep only elements
+# that are fully on screen and not hidden, and build a unique CSS selector for an element
+# from its position in the DOM.
 _JS_HELPERS = """
   const skip = new Set(
     ['HTML', 'HEAD', 'BODY', 'SCRIPT', 'STYLE', 'LINK', 'META', 'TITLE', 'NOSCRIPT']
   );
   const inView = (r) => (
-    r.top >= 0 && r.bottom <= window.innerHeight && r.left < window.innerWidth
+    r.top >= 0 && r.bottom <= window.innerHeight
+    && r.left >= 0 && r.left < window.innerWidth
   );
+  const shown = (el) => {
+    if (getComputedStyle(el).visibility === 'hidden') return false;
+    for (let a = el; a; a = a.parentElement) {
+      if (parseFloat(getComputedStyle(a).opacity) === 0) return false;
+    }
+    return true;
+  };
   const selectorFor = (el) => {
     const parts = [];
     let node = el;
@@ -57,15 +66,31 @@ _JS_HELPERS = """
   };
 """
 
+# Widening only shows on screen if the element paints something itself (own text,
+# background or border) and no ancestor cuts off what sticks out.
 _OVERFLOW_CANDIDATES_JS = """
 () => {
   //HELPERS//
+  const ownText = (el) => Array.from(el.childNodes).some(
+    (n) => n.nodeType === 3 && n.textContent.trim().length > 0
+  );
+  const painted = (el) => {
+    const s = getComputedStyle(el);
+    return s.backgroundColor !== 'rgba(0, 0, 0, 0)' || parseFloat(s.borderTopWidth) > 0;
+  };
+  const clipped = (el) => {
+    for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+      if (getComputedStyle(a).overflowX !== 'visible') return true;
+    }
+    return false;
+  };
   const out = [];
   for (const el of document.body.querySelectorAll('*')) {
     if (skip.has(el.tagName)) continue;
     const rect = el.getBoundingClientRect();
     const parentRect = el.parentElement.getBoundingClientRect();
     if (rect.width < 20 || rect.height < 10 || parentRect.width <= 0 || !inView(rect)) continue;
+    if (!shown(el) || clipped(el) || !(ownText(el) || painted(el))) continue;
     out.push({
       selector: selectorFor(el),
       width: rect.width,
@@ -89,6 +114,7 @@ _OVERLAP_CANDIDATES_JS = """
     const prevRect = prev.getBoundingClientRect();
     if (rect.width < 20 || rect.height < 10 || !inView(rect)) continue;
     if (prevRect.width < 20 || prevRect.height < 10) continue;
+    if (!shown(el) || !shown(prev)) continue;
     out.push({
       selector: selectorFor(el),
       height: rect.height,
@@ -117,6 +143,7 @@ _CLIPPING_CANDIDATES_JS = """
     const contentHeight = range.getBoundingClientRect().height;
     const rect = el.getBoundingClientRect();
     if (rect.width < 20 || contentHeight < 12 || !inView(rect)) continue;
+    if (!shown(el)) continue;
     out.push({
       selector: selectorFor(el),
       contentHeight: contentHeight,
