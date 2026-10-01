@@ -47,3 +47,11 @@ def test_size_mismatch_raises(tmp_path):
 def test_threshold_boundary():
     assert passes_quality_filter(0.05, threshold=0.05)
     assert not passes_quality_filter(0.049, threshold=0.05)
+
+
+def test_faint_colour_noise_is_ignored(tmp_path):
+    a = tmp_path / "a.png"
+    b = tmp_path / "b.png"
+    Image.new("RGB", (50, 50), (255, 255, 255)).save(a)
+    Image.new("RGB", (50, 50), (252, 252, 252)).save(b)
+    assert visual_diff(a, b) == 0.0
