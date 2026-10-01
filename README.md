@@ -18,6 +18,34 @@ Early development. Work is tracked in GitHub milestones:
 
 The bug types and their gold fixes are defined in [docs/BUG_TAXONOMY.md](docs/BUG_TAXONOMY.md).
 
+## What the bug factory produces
+
+The factory loads a real page, breaks one element with a verified CSS mutation
+(overflow, overlap or clipping), and stores the clean screenshot, the broken
+screenshot, the broken DOM and the exact CSS fix that reverses the bug. Every bug is
+checked with geometry, lands only on elements visible in the screenshot, and can be
+reproduced from a seed.
+
+Example: a form label pushed up by 33px so it overlaps the label above it.
+
+| Clean | Broken |
+| --- | --- |
+| ![clean page](docs/images/example_clean.png) | ![broken page](docs/images/example_broken.png) |
+
+Build a dataset from the Bootstrap example pages (MIT licensed):
+
+```powershell
+.\.venv\Scripts\python.exe -m forge.build `
+  --site album=https://getbootstrap.com/docs/5.3/examples/album/ `
+  --site pricing=https://getbootstrap.com/docs/5.3/examples/pricing/ `
+  --site sign-in=https://getbootstrap.com/docs/5.3/examples/sign-in/ `
+  --site blog=https://getbootstrap.com/docs/5.3/examples/blog/ `
+  --seeds 3
+```
+
+Output goes to `data/samples.jsonl` and `data/raw/`, both ignored by git. The first
+full run kept 83 of 108 attempts after the quality filter.
+
 ## Setup
 
 Requires Python 3.10 or newer (developed on 3.12).
