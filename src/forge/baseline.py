@@ -17,6 +17,7 @@ from forge.scoring import Score, parse_answer, rates, rates_by, score_answer
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 DEFAULT_MODEL = "qwen3-vl:2b-instruct"
 NUM_CTX = 8192
+MAX_ANSWER_TOKENS = 128
 
 Result = tuple[Sample, Score, str]
 
@@ -33,7 +34,7 @@ def build_request(model: str, prompt: str, image: bytes, num_ctx: int = NUM_CTX)
                 "images": [base64.b64encode(image).decode("ascii")],
             }
         ],
-        "options": {"num_ctx": num_ctx, "temperature": 0},
+        "options": {"num_ctx": num_ctx, "temperature": 0, "num_predict": MAX_ANSWER_TOKENS},
     }
 
 

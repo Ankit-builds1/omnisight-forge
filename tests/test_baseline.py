@@ -29,7 +29,7 @@ def test_build_request_shape():
     request = build_request("m", "hello", b"abc", num_ctx=4096)
     assert request["model"] == "m"
     assert request["stream"] is False
-    assert request["options"] == {"num_ctx": 4096, "temperature": 0}
+    assert request["options"] == {"num_ctx": 4096, "temperature": 0, "num_predict": 128}
     message = request["messages"][0]
     assert message["role"] == "user"
     assert message["content"] == "hello"

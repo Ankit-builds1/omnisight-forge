@@ -8,7 +8,11 @@ from forge.capture import VIEWPORTS
 
 MAX_DOM_CHARS = 12000
 TRUNCATION_MARKER = " [truncated]"
-RESPONSE_FORMAT = '{"selector": "...", "property": "...", "value": "..."}'
+RESPONSE_FORMAT = (
+    '{"selector": "<CSS selector of the broken element>", '
+    '"property": "<one CSS property name, e.g. margin-left>", '
+    '"value": "<the corrected value, e.g. 16px>"}'
+)
 
 _COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 _HEAVY = re.compile(r"<(style|script|svg)\b[^>]*>.*?</\1>", re.DOTALL | re.IGNORECASE)
