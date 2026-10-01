@@ -43,7 +43,8 @@ def parse_answer(text: str) -> dict[str, str] | None:
 
 def gold_answer(sample: Sample) -> dict[str, str]:
     """The answer the healer should give, derived from the sample's labels."""
-    value = sample.gold_fix.split(":", 1)[1].strip().rstrip(";").strip()
+    first_declaration = sample.gold_fix.split(";")[0]
+    value = first_declaration.split(":", 1)[1].strip()
     return {"selector": sample.target_selector, "property": sample.property, "value": value}
 
 

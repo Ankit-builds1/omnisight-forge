@@ -116,3 +116,27 @@ def test_rates_and_rates_by():
 def test_rates_rejects_empty_input():
     with pytest.raises(ValueError):
         rates([])
+
+def test_gold_answer_keeps_only_first_declaration():
+    from forge.dataset import Sample
+    from forge.scoring import gold_answer
+
+    sample = Sample(
+        sample_id="x_desktop_clipping_0",
+        site="x",
+        viewport="desktop",
+        bug_type="CLIPPING",
+        target_selector="body > p",
+        property="height",
+        broken_css="height: 4px; overflow: hidden",
+        gold_fix="height: 24px; overflow: visible",
+        clean_screenshot="data/raw/x.png",
+        broken_screenshot="data/raw/x_broken.png",
+        dom_snapshot="data/raw/x.html",
+        visual_diff_score=0.1,
+    )
+    assert gold_answer(sample) == {
+        "selector": "body > p",
+        "property": "height",
+        "value": "24px",
+    }
