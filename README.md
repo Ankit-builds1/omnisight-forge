@@ -11,7 +11,7 @@ engineering alone.
 
 Early development. Work is tracked in GitHub milestones:
 
-- v0.1 Bug Factory (in progress)
+- v0.1 Bug Factory (done)
 - v0.2 Healer
 - v0.3 Verifier
 - v0.4 Dashboard / Flywheel
