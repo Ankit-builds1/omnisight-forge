@@ -3,7 +3,14 @@ from dataclasses import asdict
 
 import pytest
 
-from forge.dataset import Sample, SampleError, append_sample, read_samples
+from forge.dataset import (
+    Sample,
+    SampleError,
+    SplitError,
+    append_sample,
+    read_samples,
+    split_by_site,
+)
 
 
 def make_sample(**overrides):
@@ -72,3 +79,40 @@ def test_corrupt_line_fails_loudly(tmp_path):
     path.write_text(json.dumps(bad) + "\n", encoding="utf-8")
     with pytest.raises(SampleError):
         read_samples(path)
+
+
+def make_site_samples():
+    return [
+        make_sample(sample_id=f"{site}_desktop_overflow_{n}", site=site)
+        for site in ("album", "pricing", "blog")
+        for n in range(2)
+    ]
+
+
+def test_split_keeps_held_out_sites_out_of_train():
+    train, held_out = split_by_site(make_site_samples(), {"blog"})
+    assert {s.site for s in held_out} == {"blog"}
+    assert "blog" not in {s.site for s in train}
+    assert len(train) == 4
+    assert len(held_out) == 2
+
+
+def test_split_loses_no_samples():
+    samples = make_site_samples()
+    train, held_out = split_by_site(samples, ["pricing", "blog"])
+    assert sorted(s.sample_id for s in train + held_out) == sorted(s.sample_id for s in samples)
+
+
+def test_split_rejects_unknown_site():
+    with pytest.raises(SplitError):
+        split_by_site(make_site_samples(), {"nope"})
+
+
+def test_split_rejects_empty_held_out():
+    with pytest.raises(SplitError):
+        split_by_site(make_site_samples(), set())
+
+
+def test_split_rejects_holding_out_every_site():
+    with pytest.raises(SplitError):
+        split_by_site(make_site_samples(), {"album", "pricing", "blog"})

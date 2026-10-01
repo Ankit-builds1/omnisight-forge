@@ -57,3 +57,29 @@ def read_samples(path: Path | str) -> list[Sample]:
             if line.strip():
                 samples.append(Sample(**json.loads(line)))
     return samples
+
+
+class SplitError(ValueError):
+    """Raised when a train/held-out split cannot be made as requested."""
+
+
+def split_by_site(
+    samples: list[Sample], held_out_sites: set[str] | list[str]
+) -> tuple[list[Sample], list[Sample]]:
+    """Split samples by site into (train, held_out).
+
+    Every sample of a held-out site goes to held_out, so a held-out site
+    never appears in train.
+    """
+    held = set(held_out_sites)
+    if not held:
+        raise SplitError("Give at least one held-out site.")
+    known = {sample.site for sample in samples}
+    unknown = held - known
+    if unknown:
+        raise SplitError(f"Unknown held-out sites: {sorted(unknown)}")
+    if held >= known:
+        raise SplitError("Held-out sites cover every site; nothing left to train on.")
+    train = [sample for sample in samples if sample.site not in held]
+    held_out = [sample for sample in samples if sample.site in held]
+    return train, held_out
