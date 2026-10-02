@@ -78,7 +78,7 @@ def export(
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Export samples as chat training data.")
-    parser.add_argument("--samples", default="data/samples.jsonl")
+    parser.add_argument("--samples", required=True)
     parser.add_argument("--held-out", nargs="+", default=DEFAULT_HELD_OUT)
     parser.add_argument("--out", default="data/export")
     args = parser.parse_args(argv)

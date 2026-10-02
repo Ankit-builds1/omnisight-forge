@@ -108,7 +108,7 @@ def format_report(results: list[Result]) -> str:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Zero-shot healer baseline via Ollama.")
-    parser.add_argument("--samples", default="data/samples.jsonl")
+    parser.add_argument("--samples", required=True)
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--sites", nargs="*", default=None)
     parser.add_argument("--limit", type=int, default=None)
