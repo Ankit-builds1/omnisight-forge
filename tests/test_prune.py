@@ -63,3 +63,18 @@ def test_prune_never_removes_the_target_or_its_parents():
     assert "Target text" in html
     assert 'style="visibility:visible"' in html
     assert "Other hidden text" not in html
+
+def test_prune_numbers_the_kept_elements_including_the_target():
+    from forge.elements import element_paths
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 400, "height": 300})
+        page.set_content(KEEP_HTML)
+        prune_offscreen(page, keep="body > div:nth-of-type(1) > p:nth-of-type(1)")
+        html = page.content()
+        browser.close()
+    assert element_paths(html) == {
+        1: "body > div:nth-of-type(1)",
+        2: "body > div:nth-of-type(1) > p:nth-of-type(1)",
+    }

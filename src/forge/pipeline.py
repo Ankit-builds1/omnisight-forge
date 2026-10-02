@@ -15,24 +15,31 @@ from forge.quality import DEFAULT_THRESHOLD, passes_quality_filter, visual_diff
 # Empty every element that is completely off-screen or invisible, but keep the tag itself,
 # so nth-of-type positions (and therefore every selector) stay the same. The element passed
 # as `keep` and all of its ancestors are never touched, so the bug target is always present.
+# Every element that is kept gets a number in the `n` attribute (document order); the healer
+# answers with that number and forge.elements turns it back into a selector.
 _PRUNE_JS = """
 (keep) => {
   const target = keep ? document.querySelector(keep) : null;
   const w = window.innerWidth;
   const h = window.innerHeight;
+  const skip = new Set(['SCRIPT', 'STYLE', 'LINK', 'META', 'NOSCRIPT', 'TEMPLATE']);
   const off = (r) => r.bottom <= 0 || r.top >= h || r.right <= 0 || r.left >= w;
   const hidden = (el) => {
     const s = getComputedStyle(el);
     return s.visibility === 'hidden' || s.opacity === '0';
   };
+  const kept = [];
   for (const el of Array.from(document.body.querySelectorAll('*'))) {
     if (!el.isConnected) continue;
-    if (target && (el === target || el.contains(target))) continue;
-    if (off(el.getBoundingClientRect()) || hidden(el)) {
+    const holdsTarget = target && (el === target || el.contains(target));
+    if (!holdsTarget && (off(el.getBoundingClientRect()) || hidden(el))) {
       el.replaceChildren();
       for (const name of el.getAttributeNames()) el.removeAttribute(name);
+      continue;
     }
+    if (!skip.has(el.tagName)) kept.push(el);
   }
+  kept.forEach((el, i) => el.setAttribute('n', String(i + 1)));
 }
 """
 
@@ -53,7 +60,7 @@ def make_sample_id(site: str, viewport: str, bug_type: str, seed: int) -> str:
 
 
 def prune_offscreen(page: Page, keep: str | None = None) -> None:
-    """Empty off-screen and invisible elements; tags stay and `keep` is never touched."""
+    """Empty off-screen and invisible elements and number the rest; `keep` is never touched."""
     page.evaluate(_PRUNE_JS, keep)
 
 
