@@ -48,3 +48,11 @@ def test_build_prompt_truncates_very_long_html():
 def test_build_prompt_rejects_unknown_viewport():
     with pytest.raises(KeyError):
         build_prompt("watch", "<p></p>")
+
+def test_link_and_media_attributes_are_dropped():
+    html = (
+        '<a href="/wiki/Main_Page" title="Visit the main page" accesskey="z" rel="x" '
+        'id="n1" style="color: red;">Main</a>'
+        '<img src="/a.svg" srcset="/a2.svg 2x" alt="Logo" lang="en" dir="ltr" tabindex="0">'
+    )
+    assert shorten_dom(html) == '<a id="n1" style="color: red;">Main</a><img>'
