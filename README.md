@@ -46,6 +46,20 @@ Build a dataset from the Bootstrap example pages (MIT licensed):
 Output goes to `data/samples.jsonl` and `data/raw/`, both ignored by git. The first
 full run kept 83 of 108 attempts after the quality filter.
 
+## Results
+
+Qwen3-VL-4B fine-tuned with LoRA, tested on held-out sites it never saw in training. Full
+tables and notes are in [docs/RESULTS.md](docs/RESULTS.md).
+
+| run | test sites (samples) | zero-shot 4B | fine-tuned 4B |
+| --- | --- | --- | --- |
+| 1 | sign-in (15) | 0% | 73% |
+| 2 | sign-in + wiki (20) | 0% | 15% |
+| 3 | sign-in + wiki (19) | 0% | 32% (sign-in 100%, wiki 0%) |
+
+Wikipedia is still 0% because the model cannot write its long selectors; numbered elements
+(#32) are the next step.
+
 ## Setup
 
 Requires Python 3.10 or newer (developed on 3.12).
