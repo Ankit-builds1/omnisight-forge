@@ -93,3 +93,27 @@ Notes:
   are values. The gold value is the original CSS value, which the broken page no longer shows
   (for example `height: 79.1875px`), and a different value can still fix the page. Text matching
   counts those as wrong; the browser verifier (#35) will check whether a fix works.
+## Browser verification of run 4 (#35)
+
+`python -m forge.verify` rebuilds each bug from its seed on the live page, applies the proposed
+fix and counts it as fixed when it removes at least 90% of the bug's pixel change. Self-check with
+the gold fixes on the v4 sign-in and wiki samples: 26 of 27 fixed (96%); the one miss is a live
+Wikipedia change where the bug now lands on another element.
+
+| model | exact-text success | verified fixed |
+|---|---|---|
+| 4B zero-shot | 14% | 24% |
+| 4B fine-tuned | 43% | 29% |
+
+Fine-tuned 4B, verified: sign-in 50%, wiki 20%; CLIPPING 0%, OVERFLOW 0%, OVERLAP 75%.
+
+Notes:
+
+- Text matching overstated the fine-tuned model. Its CLIPPING heights within the 2 px tolerance
+  (40px against 42px on sign-in) still cut the text, so none of them fix the page.
+- Some answers that text matching calls wrong do fix the page, e.g. `margin-top: 0px` where the
+  original was 8px.
+- The zero-shot model fixes 2 of 4 OVERFLOW bugs with `width: 100%`; the fine-tuned model learned
+  to guess the original pixel width and fixes none. Training on the original value teaches the
+  model to imitate a number the broken page does not show. The next step is to train on fixes
+  that the verifier has confirmed.
