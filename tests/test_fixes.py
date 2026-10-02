@@ -36,3 +36,11 @@ def test_overlap_keeps_the_original_value(tmp_path):
     fix = choose_fix(url, sample, tmp_path / "v")
     assert fix["value"] == gold_answer(sample)["value"]
     assert fix["source"] == "original"
+
+def test_unverifiable_sample_gets_source_none(tmp_path, monkeypatch):
+    import forge.fixes
+    from forge.verify import Verdict
+
+    url, sample = make(tmp_path, "CLIPPING")
+    monkeypatch.setattr(forge.fixes, "verify_fix", lambda *args: Verdict(False, 0.1, 0.1))
+    assert choose_fix(url, sample, tmp_path / "v")["source"] == "none"

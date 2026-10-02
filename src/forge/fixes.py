@@ -1,9 +1,11 @@
-"""Pick, for every sample, a fix that the browser verifier confirms (#41).
+"""Pick, for every sample, a fix that the browser verifier confirms (#41, #43).
 
 The original CSS value is often not visible on the broken page, so a model trained to repeat
 it learns to guess numbers. A robust value such as `height: auto` repairs the page without
-knowing the original. For each sample the candidates are tried in order and the first one the
-verifier accepts is kept; the original value is the fallback.
+knowing the original. For each sample the robust candidates and then the original value are
+tried in the verifier, and the first one that fixes the page is kept. If none does, the sample
+gets source "none" and is left out of training: a CLIPPING bug also sets `overflow: hidden`,
+and on some elements no single declaration can undo both.
 """
 
 from __future__ import annotations
@@ -26,14 +28,15 @@ CANDIDATES: dict[str, list[str]] = {
 
 
 def choose_fix(url: str, sample: Sample, out_dir: Path | str) -> dict[str, str]:
-    """The first robust value that verifies, else the original value."""
+    """The first value that verifies: robust candidates, then the original; else "none"."""
     gold = gold_answer(sample)
-    for value in CANDIDATES.get(sample.bug_type, []):
+    for value in [*CANDIDATES.get(sample.bug_type, []), gold["value"]]:
         if verify_fix(url, sample, {**gold, "value": value}, out_dir).fixed:
+            source = "original" if value == gold["value"] else "robust"
             return {"sample_id": sample.sample_id, "property": gold["property"],
-                    "value": value, "source": "robust"}
+                    "value": value, "source": source}
     return {"sample_id": sample.sample_id, "property": gold["property"],
-            "value": gold["value"], "source": "original"}
+            "value": gold["value"], "source": "none"}
 
 
 def read_fixes(path: Path | str) -> dict[str, dict[str, str]]:

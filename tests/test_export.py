@@ -87,3 +87,13 @@ def test_to_example_uses_a_verified_fix_when_given(tmp_path):
     fix = {"sample_id": sample.sample_id, "property": "height", "value": "auto", "source": "robust"}
     answer = to_example(sample, fix)["messages"][1]["content"][0]["text"]
     assert json.loads(answer) == {"element": 1, "property": "height", "value": "auto"}
+
+def test_export_skips_unfixable_training_samples_but_keeps_test_samples(tmp_path):
+    samples = [
+        make_sample(tmp_path, "a_mobile_clipping_0", "a"),
+        make_sample(tmp_path, "a_mobile_clipping_1", "a"),
+        make_sample(tmp_path, "b_mobile_clipping_0", "b"),
+    ]
+    none = {"property": "height", "value": "24px", "source": "none"}
+    fixes = {"a_mobile_clipping_1": none, "b_mobile_clipping_0": none}
+    assert export(samples, ["b"], tmp_path / "export", fixes) == (1, 1)
