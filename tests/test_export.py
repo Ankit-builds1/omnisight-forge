@@ -81,3 +81,9 @@ def test_drop_duplicates_keeps_first_of_same_target_and_fix(tmp_path):
     copy = make_sample(tmp_path, "a_mobile_clipping_1", "a")
     other = make_sample(tmp_path, "b_mobile_clipping_0", "b")
     assert drop_duplicates([first, copy, other]) == [first, other]
+
+def test_to_example_uses_a_verified_fix_when_given(tmp_path):
+    sample = make_sample(tmp_path, "a_mobile_clipping_0", "a")
+    fix = {"sample_id": sample.sample_id, "property": "height", "value": "auto", "source": "robust"}
+    answer = to_example(sample, fix)["messages"][1]["content"][0]["text"]
+    assert json.loads(answer) == {"element": 1, "property": "height", "value": "auto"}

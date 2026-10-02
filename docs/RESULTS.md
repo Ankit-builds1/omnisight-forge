@@ -117,3 +117,28 @@ Notes:
   to guess the original pixel width and fixes none. Training on the original value teaches the
   model to imitate a number the broken page does not show. The next step is to train on fixes
   that the verifier has confirmed.
+## Run 5: training on verified fixes (#41)
+
+Same v4 samples, model and settings as run 4; only the training answers changed. For every
+sample `python -m forge.fixes` tried robust values in the browser verifier and kept the first that
+fixed the page: CLIPPING `height: auto` (33 of 38), OVERFLOW `width: auto` (31 of 32) or `100%`
+(1 of 32); the other 5 CLIPPING samples and all OVERLAP samples keep the original value. Dataset
+v5 = v4 samples + these answers (`--fixes data/v5/fixes.jsonl` on export).
+
+Verified in the browser on the same 21 test samples:
+
+| model | all | sign-in | wiki | CLIPPING | OVERFLOW | OVERLAP |
+|---|---|---|---|---|---|---|
+| 4B zero-shot | 24% | 50% | 13% | 0% | 50% | 38% |
+| run 4 fine-tuned | 29% | 50% | 20% | 0% | 0% | 75% |
+| run 5 fine-tuned | 57% | 50% | 60% | 22% | 100% | 75% |
+
+Notes:
+
+- The model now answers `width: auto` and `height: auto` on pages it never saw; every OVERFLOW
+  test bug is fixed.
+- On sign-in it answers `height: 44px` for the clipped button (original 42px). The text is no
+  longer cut, but the button stays 2px taller than the clean page, so the verifier rejects it. The
+  5 training CLIPPING samples where `auto` failed are buttons and inputs with pixel heights, which
+  likely taught this.
+- Two wiki CLIPPING answers name the wrong element; one wiki sample is a live-page change.
