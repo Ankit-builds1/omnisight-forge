@@ -6,10 +6,10 @@ import re
 
 from forge.capture import VIEWPORTS
 
-MAX_DOM_CHARS = 12000
+MAX_DOM_CHARS = 20000
 TRUNCATION_MARKER = " [truncated]"
 RESPONSE_FORMAT = (
-    '{"selector": "<CSS selector of the broken element>", '
+    '{"element": <the n number of the broken element>, '
     '"property": "<one CSS property name, e.g. margin-left>", '
     '"value": "<the corrected value, e.g. 16px>"}'
 )
@@ -27,8 +27,8 @@ def shorten_dom(html: str) -> str:
     """Make a page's HTML small enough for the model without losing the bug.
 
     Style, script and svg blocks are emptied but their tags are kept, so
-    :nth-of-type counts stay correct. Inline style and id attributes are kept
-    because the bug lives in the inline style.
+    :nth-of-type counts stay correct. Inline style, id and the element number `n`
+    are kept because the bug lives in the inline style.
     """
     html = _COMMENT.sub("", html)
     html = _HEAVY.sub(lambda m: f"<{m.group(1).lower()}></{m.group(1).lower()}>", html)
@@ -47,10 +47,10 @@ def build_prompt(viewport: str, dom_html: str) -> str:
             "A web page has a layout bug. One element has a wrong inline CSS value.",
             f"Viewport: {viewport} ({width}x{height} pixels).",
             "You get a screenshot of the broken page and its HTML (styles and scripts removed).",
+            "Every visible element in the HTML has a number in its n attribute.",
             "Reply with ONLY a JSON object in this form:",
             RESPONSE_FORMAT,
-            "Write the selector as a chain from body using :nth-of-type, for example",
-            "body > div:nth-of-type(2) > p:nth-of-type(1).",
+            "Use the n number of the element whose CSS value is wrong.",
             "",
             "HTML:",
             dom,

@@ -33,7 +33,7 @@ def test_comments_removed_and_whitespace_collapsed():
 def test_build_prompt_has_size_format_and_html():
     prompt = build_prompt("mobile", "<body><p>Hi</p></body>")
     assert "mobile (375x812 pixels)" in prompt
-    assert '"selector"' in prompt
+    assert '"element"' in prompt
     assert '"property"' in prompt
     assert '"value"' in prompt
     assert prompt.endswith("<body><p>Hi</p></body>")

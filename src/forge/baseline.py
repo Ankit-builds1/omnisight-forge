@@ -81,7 +81,9 @@ def evaluate(
     results: list[Result] = []
     for index, sample in enumerate(samples, start=1):
         raw = ask(sample)
-        score = score_answer(parse_answer(raw), sample)
+        dom = Path(sample.dom_snapshot)
+        html = dom.read_text(encoding="utf-8") if dom.exists() else None
+        score = score_answer(parse_answer(raw, html), sample)
         results.append((sample, score, raw))
         if on_result is not None:
             on_result(index, len(samples), sample, score, raw)

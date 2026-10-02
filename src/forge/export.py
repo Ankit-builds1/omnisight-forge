@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 
 from forge.dataset import Sample, read_samples, split_by_site
+from forge.elements import element_number
 from forge.prompt import build_prompt
 from forge.scoring import gold_answer
 
@@ -21,7 +22,11 @@ def to_example(sample: Sample) -> dict:
     """One training example: screenshot + baseline prompt in, gold JSON out."""
     dom = Path(sample.dom_snapshot).read_text(encoding="utf-8")
     prompt = build_prompt(sample.viewport, dom)
-    answer = json.dumps(gold_answer(sample))
+    number = element_number(dom, sample.target_selector)
+    if number is None:
+        raise ValueError(f"{sample.sample_id}: the bug target has no element number")
+    gold = gold_answer(sample)
+    answer = json.dumps({"element": number, "property": gold["property"], "value": gold["value"]})
     return {
         "sample_id": sample.sample_id,
         "image": f"images/{image_name(sample)}",

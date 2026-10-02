@@ -1,15 +1,19 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from forge.dataset import Sample
-from forge.export import export, to_example
+from forge.export import drop_duplicates, export, to_example
 from forge.prompt import build_prompt
 from forge.scoring import gold_answer, parse_answer
 
+DOM = '<body><p n="1">hi</p></body>'
 
-def make_sample(tmp_path: Path, sample_id: str, site: str) -> Sample:
-    dom = tmp_path / f"{sample_id}.html"
-    dom.write_text("<body><p>hi</p></body>", encoding="utf-8")
+
+def make_sample(tmp_path: Path, sample_id: str, site: str, dom: str = DOM) -> Sample:
+    dom_path = tmp_path / f"{sample_id}.html"
+    dom_path.write_text(dom, encoding="utf-8")
     shot = tmp_path / f"{sample_id}_broken.png"
     shot.write_bytes(b"png-" + sample_id.encode())
     return Sample(
@@ -23,7 +27,7 @@ def make_sample(tmp_path: Path, sample_id: str, site: str) -> Sample:
         gold_fix="height: 24px; overflow: visible",
         clean_screenshot=str(tmp_path / f"{sample_id}.png"),
         broken_screenshot=str(shot),
-        dom_snapshot=str(dom),
+        dom_snapshot=str(dom_path),
         visual_diff_score=0.1,
     )
 
@@ -40,18 +44,21 @@ def test_to_example_uses_the_baseline_prompt(tmp_path):
     assert example["image"] == "images/a_mobile_clipping_0.png"
     assert user["role"] == "user"
     assert user["content"][0] == {"type": "image"}
-    assert user["content"][1] == {
-        "type": "text",
-        "text": build_prompt("mobile", "<body><p>hi</p></body>"),
-    }
+    assert user["content"][1] == {"type": "text", "text": build_prompt("mobile", DOM)}
     assert assistant["role"] == "assistant"
 
 
-def test_answer_round_trips_through_the_scorer(tmp_path):
+def test_answer_uses_the_element_number_and_round_trips(tmp_path):
     sample = make_sample(tmp_path, "a_mobile_clipping_0", "a")
     answer = to_example(sample)["messages"][1]["content"][0]["text"]
-    assert parse_answer(answer) == gold_answer(sample)
-    assert gold_answer(sample)["value"] == "24px"
+    assert json.loads(answer) == {"element": 1, "property": "height", "value": "24px"}
+    assert parse_answer(answer, DOM) == gold_answer(sample)
+
+
+def test_to_example_rejects_a_target_without_a_number(tmp_path):
+    sample = make_sample(tmp_path, "a_mobile_clipping_0", "a", dom="<body><p>hi</p></body>")
+    with pytest.raises(ValueError):
+        to_example(sample)
 
 
 def test_export_splits_by_site_and_copies_images(tmp_path):
@@ -70,8 +77,6 @@ def test_export_splits_by_site_and_copies_images(tmp_path):
 
 
 def test_drop_duplicates_keeps_first_of_same_target_and_fix(tmp_path):
-    from forge.export import drop_duplicates
-
     first = make_sample(tmp_path, "a_mobile_clipping_0", "a")
     copy = make_sample(tmp_path, "a_mobile_clipping_1", "a")
     other = make_sample(tmp_path, "b_mobile_clipping_0", "b")
