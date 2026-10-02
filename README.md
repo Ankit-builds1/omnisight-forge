@@ -56,6 +56,7 @@ tables and notes are in [docs/RESULTS.md](docs/RESULTS.md).
 | 1 | sign-in (15) | 0% | 73% |
 | 2 | sign-in + wiki (20) | 0% | 15% |
 | 3 | sign-in + wiki (19) | 0% | 32% (sign-in 100%, wiki 0%) |
+| 4 | sign-in + wiki (21) | 14% | 43% (sign-in 100%, wiki 20%) |
 
 Wikipedia is still 0% because the model cannot write its long selectors; numbered elements
 (#32) are the next step.

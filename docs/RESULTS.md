@@ -71,3 +71,25 @@ Notes:
   long selectors; issue #32 replaces them with numbered elements.
 - The test sets of runs 1, 2 and 3 differ, so rows are not directly comparable across runs; each
   run has its own zero-shot row.
+## Run 4: numbered elements (dataset v4)
+
+Every kept on-screen element in the saved DOM gets a number (`n` attribute) and the healer
+answers `{"element": N, "property": ..., "value": ...}`; the scorer turns N back into the
+selector (#32). Same model and training settings as run 3. Train 84, test 21 (sign-in 6,
+wiki 15). Training took 22.3 minutes with a peak of 14.3 GB, close to the 14.6 GB limit.
+
+| model | all (21) | sign-in (6) | wiki (15) |
+|---|---|---|---|
+| 4B zero-shot | 14% | 50% | 0% |
+| 4B fine-tuned | 43% | 100% | 20% |
+
+Fine-tuned 4B on wiki: valid JSON 100% (run 3: 8%), right element 93% (run 3: 0%), right
+property 100%, right value 27%. By bug type on all sites: CLIPPING 44%, OVERFLOW 0%, OVERLAP 62%.
+
+Notes:
+
+- Answers are about 60 characters, so the looping seen in run 3 is gone.
+- The model now finds the broken element on Wikipedia 14 of 15 times; the remaining errors
+  are values. The gold value is the original CSS value, which the broken page no longer shows
+  (for example `height: 79.1875px`), and a different value can still fix the page. Text matching
+  counts those as wrong; the browser verifier (#35) will check whether a fix works.
