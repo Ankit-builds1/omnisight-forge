@@ -5,12 +5,36 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Page, sync_playwright
 
 from forge.capture import capture_page
 from forge.dataset import Sample
 from forge.mutations import MUTATIONS, MutationError
 from forge.quality import DEFAULT_THRESHOLD, passes_quality_filter, visual_diff
+
+# Empty every element that is completely off-screen or invisible, but keep the tag itself,
+# so nth-of-type positions (and therefore every selector) stay the same. The element passed
+# as `keep` and all of its ancestors are never touched, so the bug target is always present.
+_PRUNE_JS = """
+(keep) => {
+  const target = keep ? document.querySelector(keep) : null;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const off = (r) => r.bottom <= 0 || r.top >= h || r.right <= 0 || r.left >= w;
+  const hidden = (el) => {
+    const s = getComputedStyle(el);
+    return s.visibility === 'hidden' || s.opacity === '0';
+  };
+  for (const el of Array.from(document.body.querySelectorAll('*'))) {
+    if (!el.isConnected) continue;
+    if (target && (el === target || el.contains(target))) continue;
+    if (off(el.getBoundingClientRect()) || hidden(el)) {
+      el.replaceChildren();
+      for (const name of el.getAttributeNames()) el.removeAttribute(name);
+    }
+  }
+}
+"""
 
 
 @dataclass(frozen=True)
@@ -26,6 +50,11 @@ class Rejection:
 def make_sample_id(site: str, viewport: str, bug_type: str, seed: int) -> str:
     """Deterministic id, so reruns can recognise samples that already exist."""
     return f"{site}_{viewport}_{bug_type.lower()}_{seed}"
+
+
+def prune_offscreen(page: Page, keep: str | None = None) -> None:
+    """Empty off-screen and invisible elements; tags stay and `keep` is never touched."""
+    page.evaluate(_PRUNE_JS, keep)
 
 
 def generate_sample(
@@ -57,6 +86,7 @@ def generate_sample(
             except MutationError as error:
                 return Rejection(sample_id, bug_type, f"no valid mutation: {error}")
             page.screenshot(path=str(broken_png))
+            prune_offscreen(page, keep=mutation.target_selector)
             broken_dom = page.content()
         finally:
             browser.close()

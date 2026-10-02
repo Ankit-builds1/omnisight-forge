@@ -16,7 +16,11 @@ RESPONSE_FORMAT = (
 
 _COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 _HEAVY = re.compile(r"<(style|script|svg)\b[^>]*>.*?</\1>", re.DOTALL | re.IGNORECASE)
-_NOISY_ATTR = re.compile(r'\s(?:class|role|aria-[\w-]+|data-[\w-]+)="[^"]*"', re.IGNORECASE)
+_NOISY_ATTR = re.compile(
+    r'\s(?:class|role|aria-[\w-]+|data-[\w-]+|href|title|accesskey|rel|src|srcset|alt|lang|dir'
+    r'|tabindex)="[^"]*"',
+    re.IGNORECASE,
+)
 
 
 def shorten_dom(html: str) -> str:
