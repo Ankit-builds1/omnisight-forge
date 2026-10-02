@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass
 
 from forge.dataset import Sample
+from forge.elements import element_paths
 
 PX_TOLERANCE = 2.0
 _PX = re.compile(r"^\s*(-?\d+(?:\.\d+)?)px\s*$")
@@ -25,8 +26,21 @@ class Score:
         return self.selector_match and self.property_match and self.value_match
 
 
-def parse_answer(text: str) -> dict[str, str] | None:
-    """Pull the JSON answer out of model text; None if it is not a valid answer."""
+def _element_selector(number: object, html: str) -> str | None:
+    """Selector of a numbered element; "" for an unknown number, None if not a number."""
+    if isinstance(number, str) and number.strip().isdigit():
+        number = int(number)
+    if isinstance(number, bool) or not isinstance(number, int):
+        return None
+    return element_paths(html).get(number, "")
+
+
+def parse_answer(text: str, html: str | None = None) -> dict[str, str] | None:
+    """Pull the JSON answer out of model text; None if it is not a valid answer.
+
+    An answer may name the element by its `n` number instead of a selector; with the
+    sample's HTML the number is turned into the selector.
+    """
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if match is None:
         return None
@@ -36,6 +50,8 @@ def parse_answer(text: str) -> dict[str, str] | None:
         return None
     if not isinstance(data, dict):
         return None
+    if "element" in data and html is not None:
+        data = {**data, "selector": _element_selector(data["element"], html)}
     if not all(isinstance(data.get(field), str) for field in _FIELDS):
         return None
     return {field: data[field] for field in _FIELDS}

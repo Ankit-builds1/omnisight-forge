@@ -140,3 +140,18 @@ def test_gold_answer_keeps_only_first_declaration():
         "property": "height",
         "value": "24px",
     }
+
+
+def test_answer_with_element_number_is_turned_into_the_selector():
+    html = '<html><body><div n="1">x</div><p n="2">y</p></body></html>'
+    text = '{"element": 1, "property": "width", "value": "1px"}'
+    answer = parse_answer(text, html)
+    assert answer["selector"] == "body > div:nth-of-type(1)"
+    assert score_answer(answer, make_sample()).selector_match
+
+
+def test_unknown_element_number_is_a_wrong_selector():
+    html = '<html><body><div n="1">x</div></body></html>'
+    answer = parse_answer('{"element": 9, "property": "width", "value": "1px"}', html)
+    assert answer is not None
+    assert not score_answer(answer, make_sample()).selector_match

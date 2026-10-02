@@ -30,3 +30,15 @@ never touches the bug target; `shorten_dom` also drops link and media attributes
 
 Local layout (ignored by git): `data/v1` (first 4-site dataset), `data/v2`, `data/v3`, and
 `data/runs/run1` to `run3` (answers and adapters of each training run).
+## Dataset v4
+
+Same sites, seeds and commands as v3 with `data/v4/...` paths, built on 2026-10-02 after #32.
+Every kept element of the saved DOM has a number in its `n` attribute, and training answers use
+that number.
+
+- Build: 113 kept, 31 rejected. Export: 8 duplicates dropped; train 84, test 21 (sign-in 6,
+  wiki 15). The live Wikipedia page changed between v3 and v4, so the wiki samples differ a little.
+- The bug target has a number in all 113 saved DOMs, and every training answer maps back to
+  the gold selector.
+- No prompt is cut (limit now 20,000 characters). Longest prompts: wiki 13,306 characters,
+  pydocs 8,923; up to 258 numbered elements on a page.
