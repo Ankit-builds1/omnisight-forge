@@ -7,6 +7,7 @@ from pathlib import Path
 
 from forge.dataset import Sample, read_samples, split_by_site
 from forge.elements import element_number
+from forge.fixes import read_fixes
 from forge.prompt import build_prompt
 from forge.scoring import gold_answer
 
@@ -18,14 +19,14 @@ def image_name(sample: Sample) -> str:
     return sample.sample_id + Path(sample.broken_screenshot).suffix
 
 
-def to_example(sample: Sample) -> dict:
+def to_example(sample: Sample, fix: dict[str, str] | None = None) -> dict:
     """One training example: screenshot + baseline prompt in, gold JSON out."""
     dom = Path(sample.dom_snapshot).read_text(encoding="utf-8")
     prompt = build_prompt(sample.viewport, dom)
     number = element_number(dom, sample.target_selector)
     if number is None:
         raise ValueError(f"{sample.sample_id}: the bug target has no element number")
-    gold = gold_answer(sample)
+    gold = fix or gold_answer(sample)
     answer = json.dumps({"element": number, "property": gold["property"], "value": gold["value"]})
     return {
         "sample_id": sample.sample_id,
@@ -66,7 +67,8 @@ def drop_duplicates(samples: list[Sample]) -> list[Sample]:
 
 
 def export(
-    samples: list[Sample], held_out_sites: list[str], out_dir: Path | str
+    samples: list[Sample], held_out_sites: list[str], out_dir: Path | str,
+    fixes: dict[str, dict[str, str]] | None = None,
 ) -> tuple[int, int]:
     """Write train.jsonl, test.jsonl and images/; return (train, test) counts."""
     train, test = split_by_site(samples, held_out_sites)
@@ -77,7 +79,8 @@ def export(
         with (out / file_name).open("w", encoding="utf-8", newline="\n") as handle:
             for sample in part:
                 shutil.copyfile(sample.broken_screenshot, images / image_name(sample))
-                handle.write(json.dumps(to_example(sample), ensure_ascii=False) + "\n")
+                example = to_example(sample, fixes.get(sample.sample_id) if fixes else None)
+                handle.write(json.dumps(example, ensure_ascii=False) + "\n")
     return len(train), len(test)
 
 
@@ -86,12 +89,14 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--samples", required=True)
     parser.add_argument("--held-out", nargs="+", default=DEFAULT_HELD_OUT)
     parser.add_argument("--out", default="data/export")
+    parser.add_argument("--fixes", help="fixes.jsonl from forge.fixes")
     args = parser.parse_args(argv)
 
     samples = read_samples(args.samples)
     unique = drop_duplicates(samples)
     print(f"dropped {len(samples) - len(unique)} duplicate samples")
-    n_train, n_test = export(unique, args.held_out, args.out)
+    fixes = read_fixes(args.fixes) if args.fixes else None
+    n_train, n_test = export(unique, args.held_out, args.out, fixes)
     print(f"train={n_train} test={n_test} -> {args.out}")
 
 
