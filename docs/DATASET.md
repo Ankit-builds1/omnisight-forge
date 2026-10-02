@@ -16,3 +16,17 @@ Built on 2026-10-01 with the bug factory after the visibility fix (#18): 8 sites
 - Test: 20 samples from the held-out sites sign-in and wiki (OVERLAP 8, CLIPPING 8, OVERFLOW 4).
 - Gold values: OVERFLOW 23 distinct widths, CLIPPING 23 distinct heights, OVERLAP 6 distinct
   margins (0px in 33 of 43 kept samples).
+## Dataset v3
+
+Same sites, seeds and commands as v2 with `data/v3/...` paths, built on 2026-10-02 after #30. The
+saved DOM empties off-screen and invisible elements (their tags stay, so selectors stay valid) and
+never touches the bug target; `shorten_dom` also drops link and media attributes.
+
+- Build: 112 kept, 32 rejected (the same counts as v2).
+- Export: 9 duplicates dropped; train 84, test 19 (sign-in 6, wiki 13).
+- No prompt is cut at 12,000 characters (in v2 all 14 wiki and 13 pydocs prompts were cut).
+  Longest prompts: wiki 11,346 characters, pydocs 7,987.
+- The bug target is present with its inline style in all 112 saved DOMs.
+
+Local layout (ignored by git): `data/v1` (first 4-site dataset), `data/v2`, `data/v3`, and
+`data/runs/run1` to `run3` (answers and adapters of each training run).

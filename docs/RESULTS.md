@@ -34,3 +34,40 @@ Code: `notebooks/train_healer.py`. Answers were graded locally with `forge.scori
 - One held-out site with 15 samples is a small test. Issue #18 and more sites come next.
 - Both 4B rows used the same 640x640 image cap. The 2B baseline used full-size screenshots
   through Ollama.
+## Run 2: dataset v2 (8 sites)
+
+Same model and settings as run 1. Data: dataset v2 (docs/DATASET.md), 84 training samples from
+6 sites, tested on the held-out sites sign-in and wiki (20 samples). The 13 Python docs samples
+were skipped in training because they were longer than 4,000 tokens.
+
+| model | all (20) | sign-in (6) | wiki (14) |
+|---|---|---|---|
+| 4B zero-shot | 0% | 0% | 0% |
+| 4B fine-tuned | 15% | 50% | 0% |
+
+Every Wikipedia answer was invalid JSON: the prompt cut the HTML at 12,000 characters (the target
+was often in the cut part) and the answer was cut at 128 tokens. On sign-in, CLIPPING was 3 of 3
+and OVERLAP 0 of 3 (wrong element, 16px instead of 0px).
+
+## Run 3: dataset v3 (on-screen HTML)
+
+Dataset v3 saves only the on-screen, visible HTML and always keeps the bug target (#30), so no
+prompt is cut. The answer limit is 256 tokens. All 84 training samples fit (longest 2,837 tokens).
+Training took 22.6 minutes with a peak of 10.3 GB. Test: 19 samples (sign-in 6, wiki 13).
+
+| model | all (19) | sign-in (6) | wiki (13) |
+|---|---|---|---|
+| 4B zero-shot | 0% | 0% | 0% |
+| 4B fine-tuned | 32% | 100% | 0% |
+
+Fine-tuned 4B by bug type: CLIPPING 3 of 8, OVERLAP 3 of 7, OVERFLOW 0 of 4.
+
+Notes:
+
+- Sign-in is 6 of 6 on every viewport; the OVERLAP mistake from run 2 is gone.
+- 12 of 13 Wikipedia answers still hit the 256-token limit. The gold selectors are about 130 to
+  300 characters, but the model keeps repeating `div:nth-of-type(1)` segments (answers of about
+  680 characters) and never closes the JSON. The input is complete now, so the limit is writing
+  long selectors; issue #32 replaces them with numbered elements.
+- The test sets of runs 1, 2 and 3 differ, so rows are not directly comparable across runs; each
+  run has its own zero-shot row.
