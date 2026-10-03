@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
@@ -30,6 +32,7 @@ from forge.scoring import gold_answer, parse_answer, score_answer
 RESIDUAL_SHARE = 0.1
 # A page gets this long to load, twice, before the sample is reported instead of crashing.
 LOAD_TIMEOUT_MS = 60000
+RETRY_DELAY_S = 5
 LOAD_FAILED = "page load failed"
 
 _EXISTS_JS = """
@@ -57,12 +60,14 @@ def _settle(page) -> None:
 
 
 def _open(page, url: str) -> bool:
-    """Load the page, retrying once after a timeout; False if it never loads (#45)."""
-    for _ in range(2):
+    """Load the page, retrying once after a timeout or network error; False if it never loads."""
+    for attempt in range(2):
+        if attempt:
+            time.sleep(RETRY_DELAY_S)
         try:
             page.goto(url, timeout=LOAD_TIMEOUT_MS)
             return True
-        except PlaywrightTimeoutError:
+        except PlaywrightError:  # also covers timeouts
             pass
     return False
 
