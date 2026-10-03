@@ -18,7 +18,7 @@ from pathlib import Path
 from forge.build import parse_sites
 from forge.dataset import Sample, read_samples
 from forge.scoring import gold_answer
-from forge.verify import verify_fix
+from forge.verify import LOAD_FAILED, verify_fix
 
 CANDIDATES: dict[str, list[str]] = {
     "CLIPPING": ["auto"],
@@ -31,10 +31,13 @@ def choose_fix(url: str, sample: Sample, out_dir: Path | str) -> dict[str, str]:
     """The first value that verifies: robust candidates, then the original; else "none"."""
     gold = gold_answer(sample)
     for value in [*CANDIDATES.get(sample.bug_type, []), gold["value"]]:
-        if verify_fix(url, sample, {**gold, "value": value}, out_dir).fixed:
+        verdict = verify_fix(url, sample, {**gold, "value": value}, out_dir)
+        if verdict.fixed:
             source = "original" if value == gold["value"] else "robust"
             return {"sample_id": sample.sample_id, "property": gold["property"],
                     "value": value, "source": source}
+        if verdict.note == LOAD_FAILED:
+            break
     return {"sample_id": sample.sample_id, "property": gold["property"],
             "value": gold["value"], "source": "none"}
 

@@ -44,3 +44,19 @@ def test_unverifiable_sample_gets_source_none(tmp_path, monkeypatch):
     url, sample = make(tmp_path, "CLIPPING")
     monkeypatch.setattr(forge.fixes, "verify_fix", lambda *args: Verdict(False, 0.1, 0.1))
     assert choose_fix(url, sample, tmp_path / "v")["source"] == "none"
+
+
+def test_page_load_failure_stops_trying_other_values(tmp_path, monkeypatch):
+    import forge.fixes
+    from forge.verify import LOAD_FAILED, Verdict
+
+    url, sample = make(tmp_path, "OVERFLOW")
+    calls = []
+
+    def failed(*args):
+        calls.append(args)
+        return Verdict(False, 0.0, 0.0, LOAD_FAILED)
+
+    monkeypatch.setattr(forge.fixes, "verify_fix", failed)
+    assert choose_fix(url, sample, tmp_path / "v")["source"] == "none"
+    assert len(calls) == 1
