@@ -28,6 +28,9 @@ from forge.scoring import gold_answer, parse_answer, score_answer
 
 # A fix may leave at most this share of the bug's pixel change on screen.
 RESIDUAL_SHARE = 0.1
+# A page gets this long to load, twice, before the sample is reported instead of crashing.
+LOAD_TIMEOUT_MS = 60000
+LOAD_FAILED = "page load failed"
 
 _EXISTS_JS = """
 (sel) => {
@@ -51,6 +54,17 @@ def _settle(page) -> None:
     except PlaywrightTimeoutError:
         pass
     page.wait_for_timeout(500)
+
+
+def _open(page, url: str) -> bool:
+    """Load the page, retrying once after a timeout; False if it never loads (#45)."""
+    for _ in range(2):
+        try:
+            page.goto(url, timeout=LOAD_TIMEOUT_MS)
+            return True
+        except PlaywrightTimeoutError:
+            pass
+    return False
 
 
 @dataclass(frozen=True)
@@ -87,12 +101,14 @@ def verify_fix(
         try:
             viewport = {"width": width, "height": height}
             clean_page = browser.new_page(viewport=viewport)
-            clean_page.goto(url)
+            if not _open(clean_page, url):
+                return Verdict(False, 0.0, 0.0, LOAD_FAILED)
             _settle(clean_page)
             clean_page.screenshot(path=str(clean_png))
             clean_page.close()
             page = browser.new_page(viewport=viewport)
-            page.goto(url)
+            if not _open(page, url):
+                return Verdict(False, 0.0, 0.0, LOAD_FAILED)
             try:
                 mutation = MUTATIONS[sample.bug_type](page, seed=seed_of(sample))
             except MutationError:
