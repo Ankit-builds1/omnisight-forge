@@ -25,6 +25,8 @@ CANDIDATES: dict[str, list[str]] = {
     "OVERFLOW": ["auto", "100%"],
     "OVERLAP": [],
 }
+# The page did not load; the sample is not saved, so the next run tries it again.
+UNLOADED = "unloaded"
 
 
 def choose_fix(url: str, sample: Sample, out_dir: Path | str) -> dict[str, str]:
@@ -37,7 +39,8 @@ def choose_fix(url: str, sample: Sample, out_dir: Path | str) -> dict[str, str]:
             return {"sample_id": sample.sample_id, "property": gold["property"],
                     "value": value, "source": source}
         if verdict.note == LOAD_FAILED:
-            break
+            return {"sample_id": sample.sample_id, "property": gold["property"],
+                    "value": gold["value"], "source": UNLOADED}
     return {"sample_id": sample.sample_id, "property": gold["property"],
             "value": gold["value"], "source": "none"}
 
@@ -52,22 +55,34 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Choose a verified fix for every sample.")
     parser.add_argument("--samples", required=True)
     parser.add_argument("--site", action="append", required=True, metavar="NAME=URL")
-    parser.add_argument("--out", required=True, help="fixes.jsonl to write")
+    parser.add_argument(
+        "--out", required=True,
+        help="fixes.jsonl; samples already in it are skipped, so a stopped run resumes",
+    )
     args = parser.parse_args(argv)
 
     sites = parse_sites(args.site)
     samples = [s for s in read_samples(args.samples) if s.site in sites]
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    rows = []
-    for index, sample in enumerate(samples, start=1):
-        fix = choose_fix(sites[sample.site], sample, out.parent / "fix_png")
-        rows.append({**fix, "bug_type": sample.bug_type})
-        print(f"{index}/{len(samples)} {sample.sample_id:30s} {fix['property']}: "
-              f"{fix['value']} ({fix['source']})", flush=True)
-    with out.open("w", encoding="utf-8", newline="\n") as f:
-        for row in rows:
+    done = read_fixes(out) if out.exists() else {}
+    rows = list(done.values())
+    todo = [s for s in samples if s.sample_id not in done]
+    if done:
+        print(f"resuming: {len(done)} already done, {len(todo)} to go", flush=True)
+    with out.open("a", encoding="utf-8", newline="\n") as f:
+        for index, sample in enumerate(todo, start=1):
+            fix = choose_fix(sites[sample.site], sample, out.parent / "fix_png")
+            if fix["source"] == UNLOADED:
+                print(f"{index}/{len(todo)} {sample.sample_id:30s} page did not load; "
+                      "rerun to retry", flush=True)
+                continue
+            row = {**fix, "bug_type": sample.bug_type}
             f.write(json.dumps(row) + "\n")
+            f.flush()
+            rows.append(row)
+            print(f"{index}/{len(todo)} {sample.sample_id:30s} {fix['property']}: "
+                  f"{fix['value']} ({fix['source']})", flush=True)
     counts = Counter((r["bug_type"], r["source"]) for r in rows)
     for (bug_type, source), n in sorted(counts.items()):
         print(f"{bug_type:<10} {source:<9} {n}")

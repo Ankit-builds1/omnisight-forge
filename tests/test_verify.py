@@ -1,4 +1,5 @@
 import pytest
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from forge.mutations import MUTATIONS
@@ -52,25 +53,32 @@ def test_value_with_extra_declarations_is_refused(tmp_path):
 
 
 class SlowPage:
-    """A page whose first `failures` loads time out."""
+    """A page whose first `failures` loads raise `error`."""
 
-    def __init__(self, failures):
+    def __init__(self, failures, error=PlaywrightTimeoutError):
         self.failures = failures
+        self.error = error
         self.calls = 0
 
     def goto(self, url, timeout):
         self.calls += 1
         if self.calls <= self.failures:
-            raise PlaywrightTimeoutError("slow")
+            raise self.error("slow")
 
 
-def test_open_retries_once_after_a_timeout():
-    page = SlowPage(failures=1)
+@pytest.fixture
+def no_retry_delay(monkeypatch):
+    monkeypatch.setattr("forge.verify.RETRY_DELAY_S", 0)
+
+
+@pytest.mark.parametrize("error", [PlaywrightTimeoutError, PlaywrightError])
+def test_open_retries_once_after_a_timeout_or_network_error(no_retry_delay, error):
+    page = SlowPage(failures=1, error=error)
     assert _open(page, "https://example.com")
     assert page.calls == 2
 
 
-def test_open_gives_up_after_two_timeouts():
+def test_open_gives_up_after_two_failures(no_retry_delay):
     page = SlowPage(failures=5)
     assert not _open(page, "https://example.com")
     assert page.calls == 2
