@@ -142,3 +142,24 @@ Notes:
   5 training CLIPPING samples where `auto` failed are buttons and inputs with pixel heights, which
   likely taught this.
 - Two wiki CLIPPING answers name the wrong element; one wiki sample is a live-page change.
+## Run 6: only verified training answers (#43)
+
+Dataset v6: the v4 training samples with answers from `python -m forge.fixes`, which now checks
+every answer in the browser verifier, the original values included. 5 CLIPPING samples where no
+single declaration fixes the page (the leftover `overflow: hidden` still cuts blog nav links and
+checkout labels) are left out of training. Train 79, test 21 (unchanged). Training took 24.8
+minutes with a peak of 14.3 GB.
+
+| model | all | sign-in | wiki | CLIPPING | OVERFLOW | OVERLAP |
+|---|---|---|---|---|---|---|
+| run 5 fine-tuned | 57% | 50% | 60% | 22% | 100% | 75% |
+| run 6 fine-tuned | 76% | 100% | 67% | 67% | 100% | 75% |
+
+Notes:
+
+- The sign-in button now gets `height: auto` on all 3 viewports (run 5: `44px`), so sign-in is
+  6 of 6.
+- The 3 remaining CLIPPING misses on wiki are pixel heights (`10px`, `16px`); one wiki OVERLAP
+  answer names the wrong element; one wiki sample is a live-page change and counts as not fixed.
+- Exact-text success is 33% because most fixed answers (`auto`) differ from the original CSS, so
+  text matching no longer measures the model; the verifier does.
