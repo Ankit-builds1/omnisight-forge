@@ -72,6 +72,8 @@ def export(
 ) -> tuple[int, int]:
     """Write train.jsonl, test.jsonl and images/; return (train, test) counts."""
     train, test = split_by_site(samples, held_out_sites)
+    if fixes:
+        train = [s for s in train if fixes.get(s.sample_id, {}).get("source") != "none"]
     out = Path(out_dir)
     images = out / "images"
     images.mkdir(parents=True, exist_ok=True)
