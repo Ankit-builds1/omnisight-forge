@@ -116,7 +116,8 @@ def verify_fix(
                 return Verdict(False, 0.0, 0.0, LOAD_FAILED)
             try:
                 mutation = MUTATIONS[sample.bug_type](page, seed=seed_of(sample))
-            except MutationError:
+            except (MutationError, PlaywrightError):
+                # A live page that changed can lose the element the bug was built on.
                 return Verdict(False, 0.0, 0.0, "page changed: the bug could not be rebuilt")
             if mutation.target_selector != sample.target_selector:
                 return Verdict(False, 0.0, 0.0, "page changed: the bug landed elsewhere")
