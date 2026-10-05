@@ -84,6 +84,18 @@ def test_open_gives_up_after_two_failures(no_retry_delay):
     assert page.calls == 2
 
 
+def test_bug_that_cannot_be_rebuilt_is_reported_not_raised(tmp_path, monkeypatch):
+    url, sample = make(tmp_path, "OVERLAP")
+
+    def lost_element(page, seed):
+        raise PlaywrightError("Cannot read properties of null (reading 'style')")
+
+    monkeypatch.setitem(MUTATIONS, "OVERLAP", lost_element)
+    verdict = verify_fix(url, sample, gold_answer(sample), tmp_path / "lost")
+    assert not verdict.fixed
+    assert verdict.note == "page changed: the bug could not be rebuilt"
+
+
 def test_page_that_never_loads_is_reported_not_raised(tmp_path, monkeypatch):
     url, sample = make(tmp_path, "OVERLAP")
     monkeypatch.setattr("forge.verify._open", lambda page, url: False)
