@@ -10,6 +10,7 @@ import os
 
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
+import gc
 import glob
 import json
 import random
@@ -117,11 +118,19 @@ def predict(rows, path):
     with open(path, "w", encoding="utf-8") as f:
         for row in rows:
             inputs = prompt_inputs(row).to(model.device)
-            with torch.no_grad():
-                out = model.generate(**inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False)
-            raw = processor.batch_decode(
-                out[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True
-            )[0]
+            try:
+                with torch.no_grad():
+                    out = model.generate(**inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False)
+                raw = processor.batch_decode(
+                    out[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True
+                )[0]
+            except torch.cuda.OutOfMemoryError:
+                # One very long page must not end the run; it is scored as no answer.
+                raw = ""
+                print(row["sample_id"], "| out of memory, tokens:",
+                      inputs["input_ids"].shape[1], flush=True)
+            del inputs
+            torch.cuda.empty_cache()
             f.write(json.dumps({"sample_id": row["sample_id"], "raw": raw}) + "\n")
             print(row["sample_id"], "|", raw.replace("\n", " ")[:150], flush=True)
 
@@ -175,9 +184,18 @@ for epoch in range(EPOCHS):
           f"({(time.time() - start) / 60:.1f} min)", flush=True)
 
 model.save_pretrained(f"{OUT}/adapter")
+print(shutil.make_archive(f"{OUT}/adapter", "zip", f"{OUT}/adapter"))
+print("peak GPU memory in training GB:", round(torch.cuda.max_memory_allocated() / 1e9, 2))
+
+# Free the optimizer state and gradients before generating on the long test pages.
+optimizer.zero_grad(set_to_none=True)
+del optimizer
+gc.collect()
+torch.cuda.empty_cache()
+torch.cuda.reset_peak_memory_stats()
+
 model.config.use_cache = True
 print("=== fine-tuned 4B on test ===", flush=True)
 predict(test_rows, f"{OUT}/finetuned_4b_test.jsonl")
-print("peak GPU memory GB:", round(torch.cuda.max_memory_allocated() / 1e9, 2))
-print(shutil.make_archive(f"{OUT}/adapter", "zip", f"{OUT}/adapter"))
+print("peak GPU memory in testing GB:", round(torch.cuda.max_memory_allocated() / 1e9, 2))
 print(sorted(os.listdir(OUT)))
