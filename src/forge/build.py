@@ -48,6 +48,7 @@ def build_dataset(
     bug_types: Sequence[str] | None = None,
     seeds: Sequence[int] = range(3),
     threshold: float = DEFAULT_THRESHOLD,
+    snapshots: str | None = None,
 ) -> BuildReport:
     """Generate samples for every site x viewport x bug type x seed combination."""
     viewports = list(viewports or VIEWPORTS)
@@ -66,9 +67,9 @@ def build_dataset(
                         continue
                     try:
                         result = generate_sample(
-                            url, site, viewport, bug_type, seed, out_dir, threshold
+                            url, site, viewport, bug_type, seed, out_dir, threshold, snapshots
                         )
-                    except (PlaywrightError, ImageSizeError) as error:
+                    except (PlaywrightError, ImageSizeError, FileNotFoundError) as error:
                         reason = f"error: {type(error).__name__}: {error}"
                         result = Rejection(sample_id, bug_type, reason)
                     if isinstance(result, Rejection):
@@ -101,6 +102,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--out-dir", default="data/raw")
     parser.add_argument("--samples", default="data/samples.jsonl")
+    parser.add_argument("--snapshots", help="folder from forge.snapshot; replay pages offline")
     args = parser.parse_args(argv)
     try:
         sites = parse_sites(args.site)
@@ -114,6 +116,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         bug_types=args.bug_types,
         seeds=range(args.seeds),
         threshold=args.threshold,
+        snapshots=args.snapshots,
     )
     print(report.summary())
     return 0

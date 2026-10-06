@@ -79,7 +79,7 @@ def test_main_resumes_and_skips_samples_already_saved(tmp_path, monkeypatch):
     out.write_text(json.dumps(saved) + "\n", encoding="utf-8")
     seen = []
 
-    def fake(url, sample, out_dir):
+    def fake(url, sample, out_dir, snapshots=None):
         seen.append(sample.sample_id)
         return {"sample_id": sample.sample_id, "property": "height", "value": "auto",
                 "source": "robust"}
