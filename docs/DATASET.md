@@ -42,3 +42,28 @@ that number.
   the gold selector.
 - No prompt is cut (limit now 20,000 characters). Longest prompts: wiki 13,306 characters,
   pydocs 8,923; up to 258 numbered elements on a page.
+
+## Datasets v5 and v6: verified training answers
+
+Same samples as v4; only the training answers change. `python -m forge.fixes` tries robust values
+in the browser verifier (CLIPPING `height: auto`, OVERFLOW `width: auto` or `100%`) and then the
+original value, and keeps the first that fixes the page (#41).
+
+- v5: robust answers where they verify, otherwise the original value (unchecked).
+- v6: every answer is checked, the original values included; samples that no single declaration
+  fixes get source `none` and are left out of training (#43). Train 79, test 21.
+
+    python -m forge.fixes --samples data/v4/samples.jsonl --site ... --out data/v6/fixes.jsonl
+    python -m forge.export --samples data/v4/samples.jsonl --held-out sign-in wiki --fixes data/v6/fixes.jsonl --out data/v6/export
+
+## Dataset v7: 17 sites
+
+Built on 2026-10-03: the v4 sites plus cover, dashboard, carousel, features, heroes and jumbotron
+(Bootstrap examples), a second Python docs page (pydocs2), a second Wikipedia article (wiki2,
+"Web browser") and MDN ("margin"). 235 samples (OVERLAP 87, CLIPPING 80, OVERFLOW 68).
+
+- Fixes on the 13 training sites: CLIPPING robust 57, none 5; OVERFLOW robust 56, none 1;
+  OVERLAP original 66 (56 of them `0px`).
+- Export with `--held-out sign-in wiki wiki2 mdn`: 17 duplicates dropped; train 166, test 46.
+- The 2 longest training prompts (pydocs2 desktop, 4,574 tokens) are skipped in training. Seven
+  desktop test prompts (6,381 to 7,192 tokens) do not fit in a 16 GB T4 at inference.

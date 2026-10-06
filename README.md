@@ -12,7 +12,7 @@ engineering alone.
 Early development. Work is tracked in GitHub milestones:
 
 - v0.1 Bug Factory (done)
-- v0.2 Healer
+- v0.2 Healer (done)
 - v0.3 Verifier
 - v0.4 Dashboard / Flywheel
 
@@ -51,16 +51,25 @@ full run kept 83 of 108 attempts after the quality filter.
 Qwen3-VL-4B fine-tuned with LoRA, tested on held-out sites it never saw in training. Full
 tables and notes are in [docs/RESULTS.md](docs/RESULTS.md).
 
-| run | test sites (samples) | zero-shot 4B | fine-tuned 4B |
-| --- | --- | --- | --- |
-| 1 | sign-in (15) | 0% | 73% |
-| 2 | sign-in + wiki (20) | 0% | 15% |
-| 3 | sign-in + wiki (19) | 0% | 32% (sign-in 100%, wiki 0%) |
-| 4 | sign-in + wiki (21) | 14% | 43% (sign-in 100%, wiki 20%) |
+**v0.2 result: on 4 websites never seen in training, the healer repairs 69% of the measurable
+injected layout bugs, checked in a real browser** (sign-in 100%, Wikipedia 86%).
 
-Since run 4 the healer names the broken element by a number instead of writing a selector,
-which took Wikipedia from 0% to 20%. Most remaining errors are values that differ from the
-original; a browser verifier (#35) will check whether such fixes still repair the page.
+Every fix is applied to the live page and compared with the clean screenshot by
+`python -m forge.verify`, because exact text matching proved misleading: it scored run 4 at 43%
+while only 29% of its fixes actually repaired the page.
+
+| run | what changed | verified fixed |
+| --- | --- | --- |
+| 4 | numbered elements instead of selectors | 29% (sign-in + wiki, 21) |
+| 5 | trained on browser-verified fixes such as `height: auto` | 57% (sign-in + wiki, 21) |
+| 6 | only verified answers, unfixable samples dropped | 76% (sign-in + wiki, 21) |
+| 6 | same model on the harder v7 test (4 sites) | **69%** of 26 measurable samples |
+| 7 | twice the training data (13 sites) | 65% of the same 26 samples |
+
+Runs 1 to 3 used exact text matching only; see [docs/RESULTS.md](docs/RESULTS.md). A gold-fix
+check shows that only 58% of the v7 test can be measured on live pages, and the bug is written as
+an inline style the model can read. v0.3 fixes both with saved page snapshots and
+stylesheet-injected bugs.
 
 ## Setup
 
