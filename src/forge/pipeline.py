@@ -7,7 +7,7 @@ from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
 
-from forge.capture import capture_page
+from forge.capture import SCREENSHOT, capture_page, open_page, settle, snapshot_path
 from forge.dataset import Sample
 from forge.mutations import MUTATIONS, MutationError
 from forge.quality import DEFAULT_THRESHOLD, passes_quality_filter, visual_diff
@@ -72,27 +72,34 @@ def generate_sample(
     seed: int,
     out_dir: str = "data/raw",
     threshold: float = DEFAULT_THRESHOLD,
+    snapshots: Path | str | None = None,
 ) -> Sample | Rejection:
-    """Create one labeled sample, or a Rejection if no valid, visible bug could be made."""
+    """Create one labeled sample, or a Rejection if no valid, visible bug could be made.
+
+    With `snapshots`, the page is replayed offline from the recorded snapshot of this site
+    and viewport instead of loaded from the live site.
+    """
     if bug_type not in MUTATIONS:
         raise ValueError(f"Unknown bug type: {bug_type!r}.")
 
     sample_id = make_sample_id(site, viewport, bug_type, seed)
     out = Path(out_dir)
-    clean = capture_page(url, viewport=viewport, out_dir=out_dir, name=site)
+    har = snapshot_path(snapshots, site, viewport)
+    clean = capture_page(url, viewport=viewport, out_dir=out_dir, name=site, har=har)
     broken_png = out / f"{sample_id}_broken.png"
     broken_html = out / f"{sample_id}_broken.html"
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         try:
-            page = browser.new_page(viewport={"width": clean.width, "height": clean.height})
+            page = open_page(browser, viewport, har)
             page.goto(url)
+            settle(page)
             try:
                 mutation = MUTATIONS[bug_type](page, seed=seed)
             except MutationError as error:
                 return Rejection(sample_id, bug_type, f"no valid mutation: {error}")
-            page.screenshot(path=str(broken_png))
+            page.screenshot(path=str(broken_png), **SCREENSHOT)
             prune_offscreen(page, keep=mutation.target_selector)
             broken_dom = page.content()
         finally:

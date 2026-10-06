@@ -29,11 +29,13 @@ CANDIDATES: dict[str, list[str]] = {
 UNLOADED = "unloaded"
 
 
-def choose_fix(url: str, sample: Sample, out_dir: Path | str) -> dict[str, str]:
+def choose_fix(
+    url: str, sample: Sample, out_dir: Path | str, snapshots: Path | str | None = None
+) -> dict[str, str]:
     """The first value that verifies: robust candidates, then the original; else "none"."""
     gold = gold_answer(sample)
     for value in [*CANDIDATES.get(sample.bug_type, []), gold["value"]]:
-        verdict = verify_fix(url, sample, {**gold, "value": value}, out_dir)
+        verdict = verify_fix(url, sample, {**gold, "value": value}, out_dir, snapshots)
         if verdict.fixed:
             source = "original" if value == gold["value"] else "robust"
             return {"sample_id": sample.sample_id, "property": gold["property"],
@@ -59,6 +61,7 @@ def main(argv: list[str] | None = None) -> None:
         "--out", required=True,
         help="fixes.jsonl; samples already in it are skipped, so a stopped run resumes",
     )
+    parser.add_argument("--snapshots", help="folder from forge.snapshot; replay pages offline")
     args = parser.parse_args(argv)
 
     sites = parse_sites(args.site)
@@ -72,7 +75,7 @@ def main(argv: list[str] | None = None) -> None:
         print(f"resuming: {len(done)} already done, {len(todo)} to go", flush=True)
     with out.open("a", encoding="utf-8", newline="\n") as f:
         for index, sample in enumerate(todo, start=1):
-            fix = choose_fix(sites[sample.site], sample, out.parent / "fix_png")
+            fix = choose_fix(sites[sample.site], sample, out.parent / "fix_png", args.snapshots)
             if fix["source"] == UNLOADED:
                 print(f"{index}/{len(todo)} {sample.sample_id:30s} page did not load; "
                       "rerun to retry", flush=True)

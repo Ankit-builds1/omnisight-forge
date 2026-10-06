@@ -18,11 +18,10 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from playwright.sync_api import Error as PlaywrightError
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 from forge.build import parse_sites
-from forge.capture import VIEWPORTS
+from forge.capture import SCREENSHOT, open_page, settle, snapshot_path
 from forge.dataset import Sample, read_samples
 from forge.mutations import MUTATIONS, MutationError, apply_declaration
 from forge.quality import visual_diff
@@ -40,23 +39,6 @@ _EXISTS_JS = """
   try { return document.querySelector(sel) !== null; } catch (e) { return false; }
 }
 """
-
-
-_IMAGES_READY_JS = """
-() => Array.from(document.images)
-  .filter((img) => img.getBoundingClientRect().top < window.innerHeight)
-  .every((img) => img.complete)
-"""
-
-
-def _settle(page) -> None:
-    """Wait until late content (lazy images, icons) has loaded, so screenshots compare."""
-    try:
-        page.wait_for_load_state("networkidle", timeout=15000)
-        page.wait_for_function(_IMAGES_READY_JS, timeout=10000)
-    except PlaywrightTimeoutError:
-        pass
-    page.wait_for_timeout(500)
 
 
 def _open(page, url: str) -> bool:
@@ -92,26 +74,29 @@ def verify_fix(
     sample: Sample,
     answer: dict[str, str] | None,
     out_dir: Path | str,
+    snapshots: Path | str | None = None,
 ) -> Verdict:
-    """Rebuild the sample's bug on `url`, apply `answer` and compare with the clean page."""
+    """Rebuild the sample's bug on `url`, apply `answer` and compare with the clean page.
+
+    With `snapshots`, both pages are replayed offline from the recorded snapshot (#52).
+    """
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     clean_png = out / f"{sample.sample_id}_clean.png"
     broken_png = out / f"{sample.sample_id}_broken.png"
     fixed_png = out / f"{sample.sample_id}_fixed.png"
-    width, height = VIEWPORTS[sample.viewport]
+    har = snapshot_path(snapshots, sample.site, sample.viewport)
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         try:
-            viewport = {"width": width, "height": height}
-            clean_page = browser.new_page(viewport=viewport)
+            clean_page = open_page(browser, sample.viewport, har)
             if not _open(clean_page, url):
                 return Verdict(False, 0.0, 0.0, LOAD_FAILED)
-            _settle(clean_page)
-            clean_page.screenshot(path=str(clean_png))
+            settle(clean_page)
+            clean_page.screenshot(path=str(clean_png), **SCREENSHOT)
             clean_page.close()
-            page = browser.new_page(viewport=viewport)
+            page = open_page(browser, sample.viewport, har)
             if not _open(page, url):
                 return Verdict(False, 0.0, 0.0, LOAD_FAILED)
             try:
@@ -121,8 +106,8 @@ def verify_fix(
                 return Verdict(False, 0.0, 0.0, "page changed: the bug could not be rebuilt")
             if mutation.target_selector != sample.target_selector:
                 return Verdict(False, 0.0, 0.0, "page changed: the bug landed elsewhere")
-            _settle(page)
-            page.screenshot(path=str(broken_png))
+            settle(page)
+            page.screenshot(path=str(broken_png), **SCREENSHOT)
             if answer is None:
                 note = "no answer"
             elif ";" in answer["value"]:
@@ -133,7 +118,7 @@ def verify_fix(
                 declaration = f"{answer['property']}: {answer['value']}"
                 apply_declaration(page, answer["selector"], declaration)
                 note = ""
-            page.screenshot(path=str(fixed_png))
+            page.screenshot(path=str(fixed_png), **SCREENSHOT)
         finally:
             browser.close()
 
@@ -166,6 +151,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--preds", help="answers file with sample_id and raw; omit for gold")
     parser.add_argument("--site", action="append", required=True, metavar="NAME=URL")
     parser.add_argument("--out", required=True)
+    parser.add_argument("--snapshots", help="folder from forge.snapshot; replay pages offline")
     args = parser.parse_args(argv)
 
     sites = parse_sites(args.site)
@@ -184,7 +170,7 @@ def main(argv: list[str] | None = None) -> None:
         else:
             html = Path(sample.dom_snapshot).read_text(encoding="utf-8")
             answer = parse_answer(raw[sample.sample_id], html)
-        verdict = verify_fix(sites[sample.site], sample, answer, out / "png")
+        verdict = verify_fix(sites[sample.site], sample, answer, out / "png", args.snapshots)
         text_ok = score_answer(answer, sample).success
         rows.append(
             {"sample_id": sample.sample_id, "site": sample.site, "bug_type": sample.bug_type,
