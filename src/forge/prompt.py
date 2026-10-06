@@ -14,26 +14,53 @@ RESPONSE_FORMAT = (
     '"value": "<the corrected value, e.g. 16px>"}'
 )
 
+# Long text runs fill the prompt on article pages but say little about the layout; each one is
+# cut to its first words (#58).
+MAX_TEXT_CHARS = 60
+_LONG_TEXT = re.compile(r">([^<]{%d,})<" % (MAX_TEXT_CHARS + 1))
+
 _COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 _HEAVY = re.compile(r"<(style|script|svg)\b[^>]*>.*?</\1>", re.DOTALL | re.IGNORECASE)
 _NOISY_ATTR = re.compile(
-    r'\s(?:class|role|aria-[\w-]+|data-[\w-]+|href|title|accesskey|rel|src|srcset|alt|lang|dir'
-    r'|tabindex)="[^"]*"',
+    r'\s(?:class|id|role|aria-[\w-]+|data-[\w-]+|href|title|accesskey|rel|src|srcset|alt|lang'
+    r'|dir|tabindex)="[^"]*"',
     re.IGNORECASE,
 )
+# The healer answers with an element number, and forge.elements maps it back on the full saved
+# page, so elements without a number can never be an answer. Empty ones (emptied off-screen
+# parts, style and script tags, head metadata) are dropped from the prompt (#58).
+_EMPTY_UNNUMBERED = re.compile(r'<(\w+)(?![^>]*\sn=")[^>]*>\s*</\1>')
+_VOID_UNNUMBERED = re.compile(
+    r'<(?:meta|link|input|br|hr|img|source|base|wbr)(?![^>]*\sn=")[^>]*>', re.IGNORECASE
+)
+_GAP = re.compile(r">\s+<")
 
 
 def shorten_dom(html: str) -> str:
     """Make a page's HTML small enough for the model.
 
-    Style, script and svg blocks are emptied but their tags are kept, so
-    :nth-of-type counts stay correct. The page's own inline styles, id and the element
-    number `n` are kept. The injected bug itself is not in the HTML (#54).
+    Keeps every numbered element (attribute `n`), its text and its own inline style. Drops
+    comments, the content of style, script and svg blocks, noisy attributes (class, id, links,
+    ARIA), empty elements without a number, whitespace between tags, and the end of long text
+    runs. The injected bug itself is never in the HTML (#54).
     """
     html = _COMMENT.sub("", html)
     html = _HEAVY.sub(lambda m: f"<{m.group(1).lower()}></{m.group(1).lower()}>", html)
     html = _NOISY_ATTR.sub("", html)
-    return re.sub(r"\s+", " ", html).strip()
+    html = re.sub(r"\s+", " ", html).strip()
+    html = _GAP.sub("><", html)
+    html = _VOID_UNNUMBERED.sub("", html)
+    previous = None
+    while previous != html:  # removing an empty element can empty its parent
+        previous = html
+        html = _EMPTY_UNNUMBERED.sub("", html)
+    return _LONG_TEXT.sub(_cut_text, html)
+
+
+def _cut_text(match: re.Match) -> str:
+    """Keep the first words of a long text run, up to MAX_TEXT_CHARS characters."""
+    words = match.group(1)[:MAX_TEXT_CHARS].rsplit(" ", 1)[0]
+    return f">{words}…<"
 
 
 def build_prompt(viewport: str, dom_html: str) -> str:
