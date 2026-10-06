@@ -144,6 +144,25 @@ def test_every_mutation_gold_fix_restores_box(make_page, bug_type):
 
 
 @pytest.mark.parametrize("bug_type", sorted(MUTATIONS))
+def test_bug_changes_the_layout_but_not_the_html(make_page, bug_type):
+    clean = make_page()
+    broken = make_page()
+    mutation = MUTATIONS[bug_type](broken, seed=3)
+    assert rect(broken, mutation.target_selector) != rect(clean, mutation.target_selector)
+    assert broken.content() == clean.content()
+
+
+def test_rejected_attempt_is_undone(make_page):
+    from forge.mutations import _try_mutation
+
+    page = make_page()
+    selector = "body > div:nth-of-type(1) > p:nth-of-type(1)"
+    before = rect(page, selector)
+    assert not _try_mutation(page, selector, "width: 999px", "() => false")
+    assert rect(page, selector) == before
+
+
+@pytest.mark.parametrize("bug_type", sorted(MUTATIONS))
 def test_every_mutation_is_reproducible(make_page, bug_type):
     mutate = MUTATIONS[bug_type]
     assert mutate(make_page(), seed=5) == mutate(make_page(), seed=5)
