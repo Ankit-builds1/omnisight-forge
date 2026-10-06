@@ -214,3 +214,49 @@ Notes:
   HTML the model reads. v0.3 injects bugs through a stylesheet so only the screenshot shows them.
 - Variety: 11 of the 13 training sites are Bootstrap examples.
 - Memory: test pages above about 6,400 tokens do not fit on a 16 GB T4.
+
+# v0.3: a measurement that can be trusted
+
+## Offline snapshots (#52)
+
+`python -m forge.snapshot` records each site and viewport once into a HAR file; build, fixes and
+verify replay it offline with `--snapshots`. Pages open with reduced motion, screenshots stop
+animations, and the verifier rebuilds each bug on a fully loaded page, as the build does.
+
+Gold self-check (how many correct answers the verifier accepts) on the 4 test sites:
+
+| pages | gold fixes accepted |
+|---|---|
+| live (v7 test) | 58% |
+| snapshots, bug rebuilt before the page settled | 76% (39/51) |
+| snapshots, bug rebuilt after the page settled | **96% (49/51)** |
+
+The two remaining misses are MDN clipped links that no single declaration can undo.
+
+## Hidden bugs (#54)
+
+The bug factory used to write the broken value as an inline style, so the HTML the model reads
+showed it. Bugs now go into a constructed style sheet (`document.adoptedStyleSheets`) that is not
+part of the HTML; fixes are applied as `!important` inline styles.
+
+| test set (4 sites, snapshots, 2 seeds) | HTML shows the broken CSS | gold fixes accepted |
+|---|---|---|
+| inline bugs | 51 of 51 samples | 96% |
+| hidden bugs | 0 of 54 samples | 96% (52/54) |
+
+## The v0.2 model relied on the inline-style clue
+
+Run 6's adapter answered both test sets above, with the same prompt and the same pages; the only
+difference is whether the broken value is visible in the HTML. Counted on samples whose gold fix
+verifies; 6 wiki2 desktop pages in each set ran out of memory and have no answer.
+
+| run 6 | clue visible | clue hidden |
+|---|---|---|
+| right element (of answered) | 38/39 = 97% | 0/42 = 0% |
+| right property (of answered) | 97% | 21% |
+| verified fixed | 30/43 = 70% | **0/46 = 0%** |
+
+Without the clue the model guesses: a wrong element on every page, often with an unrelated
+property (`margin` on 15 pages, `display: none` on 2). Run 6 had learned to find the element
+with an unusual inline style in the HTML, not to read the screenshot, so the v0.2 numbers measure
+that shortcut. Training must use hidden bugs, so that the screenshot is the only evidence.

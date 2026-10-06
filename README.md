@@ -51,8 +51,14 @@ full run kept 83 of 108 attempts after the quality filter.
 Qwen3-VL-4B fine-tuned with LoRA, tested on held-out sites it never saw in training. Full
 tables and notes are in [docs/RESULTS.md](docs/RESULTS.md).
 
-**v0.2 result: on 4 websites never seen in training, the healer repairs 69% of the measurable
-injected layout bugs, checked in a real browser** (sign-in 100%, Wikipedia 86%).
+**Finding in v0.3: the v0.2 healer was reading a leak, not the screenshot.** The bug factory
+wrote each broken value as an inline style, visible in the HTML given to the model. With the bug
+hidden in a stylesheet instead, the same model drops from 70% to 0% verified fixes and from 97%
+to 0% right elements on the same pages. The v0.2 numbers below measure that shortcut; v0.3
+trains and tests on hidden bugs only.
+
+v0.2 result (with the leak): on 4 websites never seen in training, the healer repaired 69% of the
+measurable injected layout bugs, checked in a real browser (sign-in 100%, Wikipedia 86%).
 
 Every fix is applied to the live page and compared with the clean screenshot by
 `python -m forge.verify`, because exact text matching proved misleading: it scored run 4 at 43%
@@ -67,9 +73,8 @@ while only 29% of its fixes actually repaired the page.
 | 7 | twice the training data (13 sites) | 65% of the same 26 samples |
 
 Runs 1 to 3 used exact text matching only; see [docs/RESULTS.md](docs/RESULTS.md). A gold-fix
-check shows that only 58% of the v7 test can be measured on live pages, and the bug is written as
-an inline style the model can read. v0.3 fixes both with saved page snapshots and
-stylesheet-injected bugs.
+check showed that only 58% of the v7 test could be measured on live pages; with saved page
+snapshots (v0.3) the verifier accepts 96% of gold fixes, with bugs inline or hidden.
 
 ## Setup
 
