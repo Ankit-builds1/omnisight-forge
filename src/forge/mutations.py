@@ -182,32 +182,60 @@ _CLIPPING_CHECK_JS = """
 }
 """
 
-_SET_JS = "([sel, prop, val]) => document.querySelector(sel).style.setProperty(prop, val)"
-_CLEAR_JS = "([sel, prop]) => document.querySelector(sel).style.removeProperty(prop)"
+# Bugs go into a constructed style sheet attached with document.adoptedStyleSheets. It is not
+# part of the HTML, so page.content() and the DOM the healer reads carry no trace of the bug:
+# the model has to find it from the screenshot, as with a real bug that comes from a CSS file
+# (#54). Rules are !important so they beat the page's own styles.
+_INJECT_JS = """
+([sel, prop, val]) => {
+  if (!window.__forgeBugSheet) {
+    window.__forgeBugSheet = new CSSStyleSheet();
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, window.__forgeBugSheet];
+  }
+  const sheet = window.__forgeBugSheet;
+  sheet.insertRule(sel + ' { ' + prop + ': ' + val + ' !important; }', sheet.cssRules.length);
+}
+"""
+_CLEAR_BUG_JS = "() => { if (window.__forgeBugSheet) window.__forgeBugSheet.replaceSync(''); }"
+# A fix is an !important inline style, which wins over the !important bug rule.
+_SET_JS = (
+    "([sel, prop, val]) => "
+    "document.querySelector(sel).style.setProperty(prop, val, 'important')"
+)
+
+
+def _declarations(declaration: str) -> list[tuple[str, str]]:
+    """'width: 300px; overflow: hidden' -> [('width', '300px'), ('overflow', 'hidden')]."""
+    pairs = []
+    for part in declaration.split(";"):
+        if part.strip():
+            prop, _, value = part.partition(":")
+            pairs.append((prop.strip(), value.strip()))
+    return pairs
+
+
+def inject_bug(page: Page, selector: str, declaration: str) -> None:
+    """Break an element with CSS that the page's HTML does not show."""
+    for prop, value in _declarations(declaration):
+        page.evaluate(_INJECT_JS, [selector, prop, value])
 
 
 def apply_declaration(page: Page, selector: str, declaration: str) -> None:
-    """Apply CSS declarations such as 'width: 300px; overflow: hidden' as inline styles."""
-    for part in declaration.split(";"):
-        if not part.strip():
-            continue
-        prop, _, value = part.partition(":")
-        page.evaluate(_SET_JS, [selector, prop.strip(), value.strip()])
+    """Apply a fix such as 'height: auto' as !important inline styles on the element."""
+    for prop, value in _declarations(declaration):
+        page.evaluate(_SET_JS, [selector, prop, value])
 
 
 def _candidates(page: Page, script: str) -> list[dict]:
     return page.evaluate(script.replace("//HELPERS//", _JS_HELPERS))
 
 
-def _try_mutation(
-    page: Page, selector: str, broken_css: str, properties: list[str], check_js: str
-) -> bool:
-    """Apply the broken CSS; keep it if the bug is real, otherwise undo it."""
-    apply_declaration(page, selector, broken_css)
+def _try_mutation(page: Page, selector: str, broken_css: str, check_js: str) -> bool:
+    """Inject the broken CSS; keep it if the bug is real, otherwise undo it."""
+    inject_bug(page, selector, broken_css)
     if page.evaluate(check_js, selector):
         return True
-    for prop in properties:
-        page.evaluate(_CLEAR_JS, [selector, prop])
+    page.evaluate(_CLEAR_BUG_JS)
     return False
 
 
@@ -223,7 +251,7 @@ def mutate_overflow(page: Page, seed: int = 0, max_attempts: int = 10) -> Mutati
         factor = rng.uniform(1.5, 2.5)
         new_width = int(max(candidate["parentWidth"] * factor, candidate["width"] + 200))
         broken_css = f"width: {new_width}px"
-        if _try_mutation(page, candidate["selector"], broken_css, ["width"], _OVERFLOW_CHECK_JS):
+        if _try_mutation(page, candidate["selector"], broken_css, _OVERFLOW_CHECK_JS):
             return Mutation(
                 bug_type=OVERFLOW,
                 target_selector=candidate["selector"],
@@ -245,9 +273,7 @@ def mutate_overlap(page: Page, seed: int = 0, max_attempts: int = 10) -> Mutatio
         smaller = min(candidate["prevHeight"], candidate["height"])
         amount = max(16, int(smaller * rng.uniform(0.4, 0.9)))
         broken_css = f"margin-top: -{amount}px"
-        if _try_mutation(
-            page, candidate["selector"], broken_css, ["margin-top"], _OVERLAP_CHECK_JS
-        ):
+        if _try_mutation(page, candidate["selector"], broken_css, _OVERLAP_CHECK_JS):
             return Mutation(
                 bug_type=OVERLAP,
                 target_selector=candidate["selector"],
@@ -270,9 +296,7 @@ def mutate_clipping(page: Page, seed: int = 0, max_attempts: int = 10) -> Mutati
     for candidate in candidates[:max_attempts]:
         new_height = max(6, int(candidate["contentHeight"] * rng.uniform(0.3, 0.7)))
         broken_css = f"height: {new_height}px; overflow: hidden"
-        if _try_mutation(
-            page, candidate["selector"], broken_css, ["height", "overflow"], _CLIPPING_CHECK_JS
-        ):
+        if _try_mutation(page, candidate["selector"], broken_css, _CLIPPING_CHECK_JS):
             return Mutation(
                 bug_type=CLIPPING,
                 target_selector=candidate["selector"],

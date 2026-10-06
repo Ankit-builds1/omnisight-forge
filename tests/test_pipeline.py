@@ -37,6 +37,18 @@ def test_generates_valid_sample(tmp_path, bug_type):
         assert "<html" in handle.read()
 
 
+@pytest.mark.parametrize("bug_type", sorted(MUTATIONS))
+def test_saved_html_shows_no_trace_of_the_bug(tmp_path, bug_type):
+    url = page_url(tmp_path, PAGE)
+    result = generate_sample(
+        url, "demo", "mobile", bug_type, seed=1, out_dir=str(tmp_path / "out"), threshold=0.0
+    )
+    assert isinstance(result, Sample)
+    html = open(result.dom_snapshot, encoding="utf-8").read().replace(" ", "")
+    for part in result.broken_css.split(";"):
+        assert part.replace(" ", "") not in html, part
+
+
 def test_low_visual_diff_is_rejected(tmp_path):
     url = page_url(tmp_path, PAGE)
     result = generate_sample(

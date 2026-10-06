@@ -24,11 +24,11 @@ _NOISY_ATTR = re.compile(
 
 
 def shorten_dom(html: str) -> str:
-    """Make a page's HTML small enough for the model without losing the bug.
+    """Make a page's HTML small enough for the model.
 
     Style, script and svg blocks are emptied but their tags are kept, so
-    :nth-of-type counts stay correct. Inline style, id and the element number `n`
-    are kept because the bug lives in the inline style.
+    :nth-of-type counts stay correct. The page's own inline styles, id and the element
+    number `n` are kept. The injected bug itself is not in the HTML (#54).
     """
     html = _COMMENT.sub("", html)
     html = _HEAVY.sub(lambda m: f"<{m.group(1).lower()}></{m.group(1).lower()}>", html)
@@ -44,7 +44,7 @@ def build_prompt(viewport: str, dom_html: str) -> str:
         dom = dom[:MAX_DOM_CHARS] + TRUNCATION_MARKER
     return "\n".join(
         [
-            "A web page has a layout bug. One element has a wrong inline CSS value.",
+            "A web page has a layout bug. One element has a wrong CSS value.",
             f"Viewport: {viewport} ({width}x{height} pixels).",
             "You get a screenshot of the broken page and its HTML (styles and scripts removed).",
             "Every visible element in the HTML has a number in its n attribute.",
