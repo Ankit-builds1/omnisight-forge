@@ -163,3 +163,54 @@ Notes:
   answer names the wrong element; one wiki sample is a live-page change and counts as not fixed.
 - Exact-text success is 33% because most fixed answers (`auto`) differ from the original CSS, so
   text matching no longer measures the model; the verifier does.
+
+## Run 7: 17 sites (dataset v7)
+
+Same model and settings as run 6, trained on 164 verified answers from 13 sites (2 long pydocs2
+pages skipped). Training: epoch losses 0.0431 and 0.0185, 37.9 minutes, peak 14.1 GB. Test: 46
+samples from 4 held-out sites (sign-in, wiki, wiki2, mdn).
+
+Seven desktop test pages (mdn 1, wiki2 6) ran out of memory on one T4. Splitting the model over
+two T4s recovered the mdn page; the six wiki2 pages (about 7,000 tokens) still do not fit and
+count as no answer.
+
+### How much of the test can be measured
+
+Verifying the gold fixes on the same pages (`forge.verify` without `--preds`) shows the ceiling:
+only 58% of the 50 v7 test samples verify. 14 live pages changed since they were captured (the bug
+lands elsewhere or cannot be rebuilt), and on MDN desktop and some tablet pages the screenshots
+never match even with the gold fix. A model score on all samples therefore mixes model errors with
+measurement errors, so runs are compared on the 26 samples where the gold fix verifies.
+
+### Run 6 and run 7 on the same test
+
+Run 6's adapter answered the same 46 v7 test samples (no retraining), then both were verified.
+
+| on the 26 measurable samples | run 6 (79 train) | run 7 (164 train) |
+|---|---|---|
+| all | **18/26 = 69%** | 17/26 = 65% |
+| sign-in | 6/6 | 6/6 |
+| wiki | 6/7 | 5/7 |
+| mdn | 3/4 | 3/4 |
+| wiki2 | 3/9 | 3/9 |
+| CLIPPING | 8/12 | 8/12 |
+| OVERFLOW | 3/6 | 4/6 |
+| OVERLAP | 7/8 | 5/8 |
+
+Notes:
+
+- The two runs are within one sample of each other; doubling the training data from mostly
+  Bootstrap pages did not help. The limit is the variety of the data and the measurement, not
+  the amount.
+- Run 7 answers `margin-top: 14px` on six wiki and wiki2 OVERLAP samples, a value it took from
+  the pydocs training pages; that costs it two OVERLAP fixes.
+- Run 7 names the right element in 30 of the 34 answered samples that could be rebuilt (88%).
+- Run 6 is kept as the v0.2 model.
+
+### Limits found in this release
+
+- Live pages: tests on live sites drift; v0.3 moves the benchmark to saved page snapshots.
+- Shortcut: the bug factory writes the broken value as an inline style, which is visible in the
+  HTML the model reads. v0.3 injects bugs through a stylesheet so only the screenshot shows them.
+- Variety: 11 of the 13 training sites are Bootstrap examples.
+- Memory: test pages above about 6,400 tokens do not fit on a 16 GB T4.
