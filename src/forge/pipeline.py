@@ -7,7 +7,14 @@ from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
 
-from forge.capture import SCREENSHOT, capture_page, open_page, settle, snapshot_path
+from forge.capture import (
+    SCREENSHOT,
+    capture_page,
+    close_browser,
+    open_page,
+    settle,
+    snapshot_path,
+)
 from forge.dataset import Sample
 from forge.mutations import MUTATIONS, MutationError
 from forge.quality import DEFAULT_THRESHOLD, passes_quality_filter, visual_diff
@@ -103,7 +110,7 @@ def generate_sample(
             prune_offscreen(page, keep=mutation.target_selector)
             broken_dom = page.content()
         finally:
-            browser.close()
+            close_browser(browser)
 
     broken_html.write_text(broken_dom, encoding="utf-8")
     score = visual_diff(clean.screenshot_path, broken_png)

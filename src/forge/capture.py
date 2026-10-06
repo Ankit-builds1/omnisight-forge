@@ -8,10 +8,12 @@ live site that changes later cannot change the page (#52).
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
 from playwright.sync_api import Browser, Page, sync_playwright
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 # Viewports defined in docs/BUG_TAXONOMY.md (width, height).
@@ -20,6 +22,10 @@ VIEWPORTS: dict[str, tuple[int, int]] = {
     "tablet": (768, 1024),
     "desktop": (1440, 900),
 }
+
+# Snapshot replay leaves Playwright background tasks that finish after their page closed;
+# asyncio logs each one as a long, harmless traceback that buries the real output.
+logging.getLogger("asyncio").setLevel(logging.CRITICAL)
 
 # Screenshot options: finish CSS animations and transitions, hide the text cursor.
 SCREENSHOT = {"animations": "disabled", "caret": "hide"}
@@ -66,6 +72,29 @@ def open_page(browser: Browser, viewport: str, har: Path | str | None = None) ->
     return context.new_page()
 
 
+def close_page(page: Page) -> None:
+    """Stop snapshot replay for this page's context, then close its context."""
+    try:
+        page.context.unroute_all(behavior="ignoreErrors")
+    except PlaywrightError:
+        pass
+    page.context.close()
+
+
+def close_browser(browser: Browser) -> None:
+    """Stop snapshot replay, then close the browser.
+
+    Without this, responses still being replayed when the browser closes print long
+    "Target page, context or browser has been closed" tracebacks.
+    """
+    for context in browser.contexts:
+        try:
+            context.unroute_all(behavior="ignoreErrors")
+        except PlaywrightError:
+            pass
+    browser.close()
+
+
 def settle(page: Page) -> None:
     """Wait until late content (lazy images, icons) has loaded, so screenshots compare."""
     try:
@@ -102,7 +131,7 @@ def capture_page(
             page.screenshot(path=str(screenshot_path), **SCREENSHOT)
             dom_html = page.content()
         finally:
-            browser.close()
+            close_browser(browser)
 
     dom_path.write_text(dom_html, encoding="utf-8")
     return Capture(screenshot_path, dom_path, dom_html, viewport, width, height)

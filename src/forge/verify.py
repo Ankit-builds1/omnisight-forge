@@ -21,7 +21,14 @@ from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
 from forge.build import parse_sites
-from forge.capture import SCREENSHOT, open_page, settle, snapshot_path
+from forge.capture import (
+    SCREENSHOT,
+    close_browser,
+    close_page,
+    open_page,
+    settle,
+    snapshot_path,
+)
 from forge.dataset import Sample, read_samples
 from forge.mutations import MUTATIONS, MutationError, apply_declaration
 from forge.quality import visual_diff
@@ -95,10 +102,13 @@ def verify_fix(
                 return Verdict(False, 0.0, 0.0, LOAD_FAILED)
             settle(clean_page)
             clean_page.screenshot(path=str(clean_png), **SCREENSHOT)
-            clean_page.close()
+            close_page(clean_page)
             page = open_page(browser, sample.viewport, har)
             if not _open(page, url):
                 return Verdict(False, 0.0, 0.0, LOAD_FAILED)
+            # Rebuild the bug on a fully loaded page, exactly as the build did, so it lands
+            # on the same element.
+            settle(page)
             try:
                 mutation = MUTATIONS[sample.bug_type](page, seed=seed_of(sample))
             except (MutationError, PlaywrightError):
@@ -120,7 +130,7 @@ def verify_fix(
                 note = ""
             page.screenshot(path=str(fixed_png), **SCREENSHOT)
         finally:
-            browser.close()
+            close_browser(browser)
 
     broken_diff = visual_diff(clean_png, broken_png)
     fixed_diff = visual_diff(clean_png, fixed_png)
