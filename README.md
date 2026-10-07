@@ -63,11 +63,13 @@ same model without fine-tuning. It does best on Wikipedia (50%) and Amazon Jobs 
 overflow bugs; on other pages it often falls back to the most common training answer. The gold
 fixes on the same pages verify at 96%, so most of the gap is the model, not the measurement.
 
-**Self-correcting healer:** the model points at the broken area, and the browser checks the
-elements around it for a layout symptom, tries the matching fix and keeps it only if the symptom
-disappears, without any reference screenshot. Model + browser repair **56%** of the 110 bugs
-(63% of the 99 the model could answer), against 13% for the model alone and 31% for the browser
-scanning on its own. On Wikipedia the browser alone fixes 0% and model + browser 71%.
+**Browser healer:** `forge.heal` measures the broken page for elements that stick out, overlap or
+hide their content, tries the matching fix and keeps it only if the problem disappears, without
+any reference screenshot. It repairs **71%** of the 110 bugs (79% without the 11 Flipkart pages)
+on a laptop, no GPU needed. An ablation shows the fine-tuned model adds nothing on top for these
+bug types: browser alone 71%, model + browser 71%, model alone 13%. An earlier version of the check
+mistook screen-reader-only labels for clipped text, which made the model look useful (56% vs 31%);
+the full story is in [docs/RESULTS.md](docs/RESULTS.md).
 
 v0.2 result (with the leak): on 4 websites never seen in training, the healer repaired 69% of the
 measurable injected layout bugs, checked in a real browser (sign-in 100%, Wikipedia 86%).
@@ -84,7 +86,7 @@ while only 29% of its fixes actually repaired the page.
 | 6 | same model on the harder v7 test (4 sites) | **69%** of 26 measurable samples |
 | 7 | twice the training data (13 sites) | 65% of the same 26 samples |
 | 8 | hidden bugs, 26 training sites, 896px screenshots | 13% (9 sites, 110; zero-shot 0%) |
-| 8 + healer | browser repairs around the model's element, whole page as fallback | **56%** (same 110; browser alone 31%) |
+| healer | browser measures the page and repairs it (v2 check) | **71%** (same 110; model + browser also 71%) |
 
 Runs 1 to 3 used exact text matching only; see [docs/RESULTS.md](docs/RESULTS.md). A gold-fix
 check showed that only 58% of the v7 test could be measured on live pages; with saved page
