@@ -129,8 +129,51 @@ def check_page(page: Page, viewport: str, out: Path) -> list[Finding]:
     return findings
 
 
+# Each viewport's fixes apply only at screen widths like that viewport's.
+MEDIA = {
+    "mobile": "(max-width: 767px)",
+    "tablet": "(min-width: 768px) and (max-width: 1279px)",
+    "desktop": "(min-width: 1280px)",
+}
+
+
+def fixes_css(url: str, findings: list[Finding]) -> str:
+    """One CSS file with every suggested fix, grouped by viewport in media queries."""
+    lines = [
+        f"/* OmniSight Forge suggested fixes for {url}",
+        "   Review each rule before use. Selectors follow the page's current DOM structure,",
+        "   so replace them with your own class names when you apply a fix. */",
+    ]
+    for viewport, media in MEDIA.items():
+        rules = [f for f in findings if f.viewport == viewport]
+        if not rules:
+            continue
+        lines.append(f"\n/* {viewport} */\n@media {media} {{")
+        for f in rules:
+            lines.append(f"  /* {PROBLEMS[f.kind]} */")
+            lines.append(f"  {f.selector} {{ {f.property}: {f.value} !important; }}")
+        lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
+# A before/after comparison: the after picture lies on top and the slider uncovers it.
+_SLIDER = """<div class="cmp"><img src="{before}" alt="before">
+<div class="top"><img src="{after}" alt="after"></div></div>
+<input type="range" min="0" max="100" value="100" aria-label="before / after">"""
+
+_SLIDER_JS = """<script>
+for (const input of document.querySelectorAll('input[type=range]')) {
+  const top = input.previousElementSibling.querySelector('.top');
+  const show = () => { top.style.clipPath = `inset(0 0 0 ${input.value}%)`; };
+  input.addEventListener('input', show);
+  show();
+}
+</script>"""
+
+
 def write_report(url: str, findings: list[Finding], viewports: list[str], out: Path) -> Path:
-    """A self-contained HTML page (pictures next to it) listing every finding."""
+    """A self-contained HTML page (pictures next to it) listing every finding, and fixes.css."""
+    (out / "fixes.css").write_text(fixes_css(url, findings), encoding="utf-8")
     rows = []
     for f in findings:
         rows.append(
@@ -138,11 +181,10 @@ def write_report(url: str, findings: list[Finding], viewports: list[str], out: P
             f"<td>{f.viewport}</td>"
             f"<td><code>{html.escape(f.selector)}</code><br>{PROBLEMS[f.kind]}</td>"
             f"<td><code>{f.property}: {f.value};</code></td>"
-            f'<td><img src="{f.before}" alt="before"></td>'
-            f'<td><img src="{f.after}" alt="after"></td>'
+            f"<td>{_SLIDER.format(before=f.before, after=f.after)}</td>"
             "</tr>"
         )
-    body = "\n".join(rows) or '<tr><td colspan="5">No layout symptom found.</td></tr>'
+    body = "\n".join(rows) or '<tr><td colspan="4">No layout symptom found.</td></tr>'
     page = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -151,20 +193,25 @@ def write_report(url: str, findings: list[Finding], viewports: list[str], out: P
   body {{ font: 15px/1.5 system-ui, sans-serif; margin: 24px; color: #1d1d1f; }}
   table {{ border-collapse: collapse; width: 100%; }}
   th, td {{ border-bottom: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top; }}
-  img {{ max-width: 320px; border: 1px solid #ccc; }}
   code {{ font-size: 13px; word-break: break-all; }}
   .note {{ color: #555; }}
+  .cmp {{ position: relative; display: inline-block; max-width: 480px; }}
+  .cmp img {{ display: block; max-width: 100%; border: 1px solid #ccc; }}
+  .cmp .top {{ position: absolute; inset: 0; }}
+  input[type=range] {{ display: block; width: 100%; max-width: 480px; }}
 </style></head><body>
 <h1>Layout check</h1>
 <p><a href="{html.escape(url)}">{html.escape(url)}</a>, viewports: {", ".join(viewports)}.
-{len(findings)} finding(s).</p>
+{len(findings)} finding(s). All fixes in one file: <a href="fixes.css">fixes.css</a>.</p>
 <p class="note">Each fix was tried in Chromium and removed the symptom. Review before applying:
-some symptoms are intended (sliders, text cut with an ellipsis).</p>
+some symptoms are intended (sliders, text cut with an ellipsis). Each picture starts as the
+page is now; drag its slider to the left to uncover the page with the fix.</p>
 <table>
-<tr><th>viewport</th><th>element and problem</th><th>suggested CSS</th><th>before</th>
-<th>after</th></tr>
+<tr><th>viewport</th><th>element and problem</th><th>suggested CSS</th>
+<th>before | after</th></tr>
 {body}
 </table>
+{_SLIDER_JS}
 </body></html>
 """
     path = out / "report.html"
