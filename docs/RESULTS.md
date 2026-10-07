@@ -260,3 +260,35 @@ Without the clue the model guesses: a wrong element on every page, often with an
 property (`margin` on 15 pages, `display: none` on 2). Run 6 had learned to find the element
 with an unusual inline style in the HTML, not to read the screenshot, so the v0.2 numbers measure
 that shortcut. Training must use hidden bugs, so that the screenshot is the only evidence.
+
+## Run 8: hidden bugs on 36 sites (dataset v8)
+
+Dataset v8: hidden bugs (#54), offline snapshots (#52) and the compact prompt (#58), built on 26
+training sites and 9 held-out test sites (careers pages, shops, docs, wikis, landing pages and
+forms). Training answers are verified fixes from `forge.fixes`. Train 296 (17 pages above 4,000
+tokens skipped, 279 used), test 110. Screenshots capped at 896x896 pixels. Same model and LoRA
+settings as run 6. Training: epoch losses 0.2752 and 0.1711, 83.5 minutes, peak 14.2 GB.
+
+The 11 Flipkart test pages (about 8,000 to 8,700 tokens) ran out of memory on the T4 and count as
+no answer. The gold fixes of the v8 test samples verify at 96%.
+
+Verified in the browser on the 110 test samples:
+
+| model | all | wiki | amazonjobs | svelte | books | google, mdn, wiki2, sign-in | flipkart |
+|---|---|---|---|---|---|---|---|
+| 4B zero-shot | 0% | 0% | 0% | 0% | 0% | 0% | no answer |
+| 4B fine-tuned | **13% (14/110)** | 50% | 31% | 8% | 7% | 0% | no answer |
+
+Fine-tuned 4B by bug type: OVERFLOW 21% (7/34), OVERLAP 11% (4/37), CLIPPING 8% (3/39).
+
+Notes:
+
+- This is the first run where the screenshot is the only evidence of the bug. Without fine-tuning
+  the model fixes nothing; after fine-tuning it fixes 13% on sites it never saw.
+- It works best on OVERFLOW on text pages (wiki, amazonjobs), where `width: auto` on the right
+  element fixes the page.
+- About 70 of the 99 answers are `margin-top: 0px`, the most common training answer (the OVERLAP
+  fix), whatever the bug type. When the model cannot see the bug it falls back to that answer.
+- Finding small visual bugs in a screenshot is the limit of a 4-bit 4B model trained on about 280
+  examples. The next step does not retrain: the browser tries several candidate fixes and keeps the
+  one that works.
