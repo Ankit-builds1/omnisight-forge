@@ -292,3 +292,41 @@ Notes:
 - Finding small visual bugs in a screenshot is the limit of a 4-bit 4B model trained on about 280
   examples. The next step does not retrain: the browser tries several candidate fixes and keeps the
   one that works.
+
+## Self-correcting healer (forge.heal)
+
+The run 8 model often names an element near the bug with the wrong property. `forge.heal` starts
+from the model's element and checks it and its neighbours (up to 3 steps along the DOM tree) on
+the broken page for three layout symptoms: an element sticking out of its parent by more than
+20px, a negative top margin that pulls an element over the one above it, and an element that
+hides part of its own content. For the nearest symptom it tries the matching fix (`width: auto`
+or `max-width: 100%`, `margin-top: 0px`, `height: auto`) and keeps it only if the symptom is gone.
+The healer never sees the clean page or the gold fix. Then `forge.verify` judges the final answer
+against the clean page as before.
+
+Same run 8 answers, same 110 test samples, three settings (`forge.verify --heal 3`,
+`--heal 3 --whole-page`, `--no-model`):
+
+| | all | without flipkart (99) | wiki | wiki2 | sign-in | books | svelte | mdn | google | amazonjobs |
+|---|---|---|---|---|---|---|---|---|---|---|
+| model alone (run 8) | 13% | 14% | 50% | 0% | 0% | 7% | 8% | 0% | 0% | 31% |
+| browser alone, whole page, no model | 31% | 34% | 0% | 0% | 0% | 93% | 75% | 67% | 44% | 0% |
+| model + browser near its element | 42% | 46% | 71% | 54% | 67% | 43% | 33% | 33% | 33% | 38% |
+| **model + browser, whole page as fallback** | **56%** | **63%** | 71% | 54% | 67% | 93% | 83% | 67% | 44% | 25% |
+
+By bug type (model + browser, whole-page fallback): OVERFLOW 59%, CLIPPING 56%, OVERLAP 54%.
+Flipkart is 0% in every row: the model ran out of memory there, and the page scan alone found
+no fix that verified.
+
+Notes:
+
+- The model and the browser need each other. On wiki, wiki2 and sign-in the browser alone fixes
+  nothing: scanning from the top of a large page it reaches a harmless symptom first (a menu or a
+  scroll box) and changes the wrong element. Starting from the model's element it fixes 54% to
+  71%. On small pages such as books the scan alone is enough.
+- On amazonjobs the whole-page fallback lowers the score (38% to 25%): when nothing is found near
+  the model's element, the scan replaces an answer that was right with a wrong one.
+- Limit: the three symptoms are the three bug types the factory injects, so this test suits the
+  healer. Real pages break in more ways, and some symptoms are intended (a slider that hides
+  slides, text cut with an ellipsis). On real sites the healer should suggest fixes for review,
+  not apply them silently.

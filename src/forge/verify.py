@@ -30,6 +30,7 @@ from forge.capture import (
     snapshot_path,
 )
 from forge.dataset import Sample, read_samples
+from forge.heal import healed_answer
 from forge.mutations import MUTATIONS, MutationError, apply_declaration
 from forge.quality import visual_diff
 from forge.scoring import gold_answer, parse_answer, score_answer
@@ -82,10 +83,15 @@ def verify_fix(
     answer: dict[str, str] | None,
     out_dir: Path | str,
     snapshots: Path | str | None = None,
+    heal_radius: int | None = None,
+    whole_page: bool = False,
 ) -> Verdict:
     """Rebuild the sample's bug on `url`, apply `answer` and compare with the clean page.
 
     With `snapshots`, both pages are replayed offline from the recorded snapshot (#52).
+    With `heal_radius`, the healer (forge.heal) may replace the answer with a repair it confirmed
+    on the broken page alone, before the clean page is compared. With `whole_page`, it also scans
+    the whole page when nothing is found near the answer.
     """
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -118,16 +124,26 @@ def verify_fix(
                 return Verdict(False, 0.0, 0.0, "page changed: the bug landed elsewhere")
             settle(page)
             page.screenshot(path=str(broken_png), **SCREENSHOT)
+            healing = heal_radius is not None or whole_page
+            if answer is not None and not page.evaluate(_EXISTS_JS, answer["selector"]):
+                # The healer cannot start from an element that is not there.
+                answer, note = (None, "") if healing else (answer, "selector not found")
+            else:
+                note = ""
+            if healing:
+                healed = healed_answer(page, answer, heal_radius or 0, whole_page)
+                if healed is not None and healed != answer:
+                    note = f"healed: {healed['property']}: {healed['value']}"
+                answer = healed
             if answer is None:
-                note = "no answer"
+                note = note or "no answer"
             elif ";" in answer["value"]:
                 note = "value has several declarations"
-            elif not page.evaluate(_EXISTS_JS, answer["selector"]):
-                note = "selector not found"
+            elif note == "selector not found":
+                pass
             else:
                 declaration = f"{answer['property']}: {answer['value']}"
                 apply_declaration(page, answer["selector"], declaration)
-                note = ""
             page.screenshot(path=str(fixed_png), **SCREENSHOT)
         finally:
             close_browser(browser)
@@ -162,7 +178,22 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--site", action="append", required=True, metavar="NAME=URL")
     parser.add_argument("--out", required=True)
     parser.add_argument("--snapshots", help="folder from forge.snapshot; replay pages offline")
+    parser.add_argument(
+        "--heal", type=int, metavar="RADIUS",
+        help="let forge.heal repair around the answer's element, up to RADIUS DOM steps away",
+    )
+    parser.add_argument(
+        "--whole-page", action="store_true",
+        help="let forge.heal scan the whole page when nothing is found near the answer",
+    )
+    parser.add_argument(
+        "--no-model", action="store_true",
+        help="ignore the answers: the browser scans the whole page on its own (a baseline)",
+    )
     args = parser.parse_args(argv)
+    if args.no_model:
+        args.whole_page = True
+        args.heal = None
 
     sites = parse_sites(args.site)
     samples = [s for s in read_samples(args.samples) if s.site in sites]
@@ -180,7 +211,12 @@ def main(argv: list[str] | None = None) -> None:
         else:
             html = Path(sample.dom_snapshot).read_text(encoding="utf-8")
             answer = parse_answer(raw[sample.sample_id], html)
-        verdict = verify_fix(sites[sample.site], sample, answer, out / "png", args.snapshots)
+        if args.no_model:
+            answer = None
+        verdict = verify_fix(
+            sites[sample.site], sample, answer, out / "png", args.snapshots, args.heal,
+            args.whole_page,
+        )
         text_ok = score_answer(answer, sample).success
         rows.append(
             {"sample_id": sample.sample_id, "site": sample.site, "bug_type": sample.bug_type,
