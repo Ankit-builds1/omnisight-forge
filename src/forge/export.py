@@ -77,13 +77,22 @@ def export(
     out = Path(out_dir)
     images = out / "images"
     images.mkdir(parents=True, exist_ok=True)
+    counts = []
     for file_name, part in (("train.jsonl", train), ("test.jsonl", test)):
+        written = 0
         with (out / file_name).open("w", encoding="utf-8", newline="\n") as handle:
             for sample in part:
+                try:
+                    example = to_example(sample, fixes.get(sample.sample_id) if fixes else None)
+                except ValueError as error:
+                    # A page that re-renders itself can drop the number of the bug target.
+                    print(f"skipped {error}")
+                    continue
                 shutil.copyfile(sample.broken_screenshot, images / image_name(sample))
-                example = to_example(sample, fixes.get(sample.sample_id) if fixes else None)
                 handle.write(json.dumps(example, ensure_ascii=False) + "\n")
-    return len(train), len(test)
+                written += 1
+        counts.append(written)
+    return counts[0], counts[1]
 
 
 def main(argv: list[str] | None = None) -> None:
