@@ -24,7 +24,10 @@ from PIL import Image
 from transformers import AutoProcessor, BitsAndBytesConfig, Qwen3VLForConditionalGeneration
 
 MODEL = "Qwen/Qwen3-VL-4B-Instruct"
-MAX_PIXELS = 640 * 640
+# Bugs are hidden from the HTML since #54, so the screenshot is the only evidence; at 640x640 a
+# 1440px desktop page loses the few clipped letters a bug can leave. 896x896 keeps about twice
+# the pixels; the compact prompt (#58) saved more tokens than the larger image costs.
+MAX_PIXELS = 896 * 896
 MAX_TRAIN_TOKENS = 4000
 MAX_NEW_TOKENS = 256
 EPOCHS = 2

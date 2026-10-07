@@ -76,6 +76,15 @@ def test_export_splits_by_site_and_copies_images(tmp_path):
     assert (out / "images" / "b_mobile_clipping_0.png").read_bytes() == b"png-b_mobile_clipping_0"
 
 
+def test_export_skips_a_sample_whose_target_has_no_number(tmp_path):
+    samples = [
+        make_sample(tmp_path, "a_mobile_clipping_0", "a"),
+        make_sample(tmp_path, "a_mobile_clipping_1", "a", dom="<body><p>hi</p></body>"),
+        make_sample(tmp_path, "b_mobile_clipping_0", "b"),
+    ]
+    assert export(samples, ["b"], tmp_path / "export") == (1, 1)
+
+
 def test_drop_duplicates_keeps_first_of_same_target_and_fix(tmp_path):
     first = make_sample(tmp_path, "a_mobile_clipping_0", "a")
     copy = make_sample(tmp_path, "a_mobile_clipping_1", "a")
