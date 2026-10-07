@@ -17,7 +17,8 @@ from __future__ import annotations
 
 import argparse
 import html
-from dataclasses import dataclass
+import json
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
@@ -171,9 +172,42 @@ for (const input of document.querySelectorAll('input[type=range]')) {
 </script>"""
 
 
+# Most rows in the Markdown summary, so a pull request comment stays short.
+MAX_SUMMARY_ROWS = 20
+
+
+def summary_markdown(url: str, findings: list[Finding]) -> str:
+    """A short Markdown summary, used as the pull request comment by the GitHub Action."""
+    lines = ["### OmniSight Forge layout check", ""]
+    if not findings:
+        lines.append(f"No layout symptom found on {url}.")
+        return "\n".join(lines) + "\n"
+    lines += [
+        f"{len(findings)} finding(s) on {url}. Each fix was tried in Chromium and removed the "
+        "symptom; review before applying.",
+        "",
+        "| viewport | element | problem | suggested CSS |",
+        "|---|---|---|---|",
+    ]
+    for f in findings[:MAX_SUMMARY_ROWS]:
+        lines.append(
+            f"| {f.viewport} | `{f.selector}` | {PROBLEMS[f.kind]} | "
+            f"`{f.property}: {f.value};` |"
+        )
+    if len(findings) > MAX_SUMMARY_ROWS:
+        lines.append(f"\n{len(findings) - MAX_SUMMARY_ROWS} more in the full report.")
+    lines.append("\nThe full report with before/after pictures and `fixes.css` is attached to "
+                 "this run as an artifact.")
+    return "\n".join(lines) + "\n"
+
+
 def write_report(url: str, findings: list[Finding], viewports: list[str], out: Path) -> Path:
-    """A self-contained HTML page (pictures next to it) listing every finding, and fixes.css."""
+    """The HTML report (pictures next to it), plus fixes.css, summary.md and findings.json."""
+    (out / "findings.json").write_text(
+        json.dumps([asdict(f) for f in findings], indent=2), encoding="utf-8"
+    )
     (out / "fixes.css").write_text(fixes_css(url, findings), encoding="utf-8")
+    (out / "summary.md").write_text(summary_markdown(url, findings), encoding="utf-8")
     rows = []
     for f in findings:
         rows.append(
@@ -232,6 +266,10 @@ def main(argv: list[str] | None = None) -> None:
         help="first inject this bug from the bug factory, to demonstrate a repair",
     )
     parser.add_argument("--seed", type=int, default=0, help="seed for --demo-bug")
+    parser.add_argument(
+        "--fail-on-findings", action="store_true",
+        help="exit with status 1 when anything is found (to fail a CI check)",
+    )
     args = parser.parse_args(argv)
 
     out = Path(args.out)
@@ -259,6 +297,8 @@ def main(argv: list[str] | None = None) -> None:
         finally:
             close_browser(browser)
     print(write_report(args.url, findings, viewports, out))
+    if args.fail_on_findings and findings:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
