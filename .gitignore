@@ -217,5 +217,6 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Forge generated data (samples, raw captures, baseline runs)
+# Forge generated data (samples, raw captures, baseline runs) and page reports
 data/
+reports/

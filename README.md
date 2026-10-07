@@ -103,6 +103,22 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m playwright install chromium
 ```
 
+## Check any web page
+
+`forge.report` opens a page at mobile, tablet and desktop size, looks for elements that stick out
+of their parent, overlap the element above them or hide part of their content, and writes an
+HTML report with a suggested CSS fix and before/after pictures for each finding. It runs on a
+laptop without a GPU (browser only, no model) and never changes the site.
+
+```powershell
+.\.venv\Scripts\python.exe -m forge.report --url https://example.com --out reports\example
+# demo: break the page with the bug factory first, then watch it get repaired
+.\.venv\Scripts\python.exe -m forge.report --url https://books.toscrape.com/ --out reports\demo --demo-bug OVERFLOW
+```
+
+Text hidden on purpose (screen-reader labels, text cut with an ellipsis) is not reported. Review
+each suggestion before applying it: some layouts stick out on purpose (sliders, carousels).
+
 ## Run tests and lint
 
 ```powershell
