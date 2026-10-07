@@ -60,6 +60,16 @@ def test_report_lists_findings(page, tmp_path):
     assert "1 finding(s)" in text
 
 
+def test_report_writes_fixes_css_by_viewport(page, tmp_path):
+    inject_bug(page, "#two", "width: 900px")
+    findings = check_page(page, "desktop", tmp_path)
+    write_report("https://example.com", findings, ["desktop"], tmp_path)
+    css = (tmp_path / "fixes.css").read_text(encoding="utf-8")
+    assert "@media (min-width: 1280px)" in css
+    assert f"{findings[0].selector} {{ width: auto !important; }}" in css
+    assert "max-width: 767px" not in css
+
+
 def test_report_says_when_nothing_is_found(tmp_path):
     text = write_report("https://example.com", [], ["mobile"], tmp_path).read_text("utf-8")
     assert "No layout symptom found." in text
