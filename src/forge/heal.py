@@ -52,9 +52,15 @@ _SYMPTOMS_JS = """
       return vertical >= 8 && horizontal >= 20;
     },
     clipping: (el) => {
-      const overflow = getComputedStyle(el).overflowY;
-      if (overflow !== 'hidden' && overflow !== 'clip') return false;
-      return el.clientHeight > 0 && el.scrollHeight > el.clientHeight + 1;
+      const s = getComputedStyle(el);
+      if (s.overflowY !== 'hidden' && s.overflowY !== 'clip') return false;
+      // Hidden on purpose: screen-reader-only text (1-2px box or a clip) and text cut with
+      // an ellipsis.
+      if (el.clientHeight <= 2 || el.clientWidth <= 2) return false;
+      if (s.clip !== 'auto' || s.clipPath !== 'none' || s.textOverflow === 'ellipsis') {
+        return false;
+      }
+      return el.scrollHeight > el.clientHeight + 1;
     },
   };
 """

@@ -68,6 +68,21 @@ def test_trying_a_fix_leaves_the_page_unchanged(page):
     assert width(page, "#three") == 900
 
 
+def test_text_hidden_on_purpose_is_not_a_symptom(page):
+    page.evaluate(
+        """() => {
+          const sr = document.createElement('span');
+          sr.textContent = 'Screen reader only';
+          sr.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden';
+          const dots = document.createElement('div');
+          dots.textContent = 'A long line of text that does not fit in this narrow box at all';
+          dots.style.cssText = 'width:60px;height:12px;overflow:hidden;text-overflow:ellipsis';
+          document.querySelector('#one').append(sr, dots);
+        }"""
+    )
+    assert find_symptoms(page, "#one") == []
+
+
 def test_a_bug_outside_the_radius_is_not_found(page):
     inject_bug(page, "#three", "width: 900px")
     assert heal(page, "#two", radius=1) is None
