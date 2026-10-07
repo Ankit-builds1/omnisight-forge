@@ -63,6 +63,12 @@ same model without fine-tuning. It does best on Wikipedia (50%) and Amazon Jobs 
 overflow bugs; on other pages it often falls back to the most common training answer. The gold
 fixes on the same pages verify at 96%, so most of the gap is the model, not the measurement.
 
+**Self-correcting healer:** the model points at the broken area, and the browser checks the
+elements around it for a layout symptom, tries the matching fix and keeps it only if the symptom
+disappears, without any reference screenshot. Model + browser repair **56%** of the 110 bugs
+(63% of the 99 the model could answer), against 13% for the model alone and 31% for the browser
+scanning on its own. On Wikipedia the browser alone fixes 0% and model + browser 71%.
+
 v0.2 result (with the leak): on 4 websites never seen in training, the healer repaired 69% of the
 measurable injected layout bugs, checked in a real browser (sign-in 100%, Wikipedia 86%).
 
@@ -77,7 +83,8 @@ while only 29% of its fixes actually repaired the page.
 | 6 | only verified answers, unfixable samples dropped | 76% (sign-in + wiki, 21) |
 | 6 | same model on the harder v7 test (4 sites) | **69%** of 26 measurable samples |
 | 7 | twice the training data (13 sites) | 65% of the same 26 samples |
-| 8 | hidden bugs, 26 training sites, 896px screenshots | **13%** (9 sites, 110; zero-shot 0%) |
+| 8 | hidden bugs, 26 training sites, 896px screenshots | 13% (9 sites, 110; zero-shot 0%) |
+| 8 + healer | browser repairs around the model's element, whole page as fallback | **56%** (same 110; browser alone 31%) |
 
 Runs 1 to 3 used exact text matching only; see [docs/RESULTS.md](docs/RESULTS.md). A gold-fix
 check showed that only 58% of the v7 test could be measured on live pages; with saved page
