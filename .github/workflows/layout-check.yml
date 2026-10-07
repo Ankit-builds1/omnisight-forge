@@ -1,0 +1,25 @@
+# Demo of the OmniSight Forge action: on every pull request, break a public test page with the
+# bug factory, find the bug, and comment the suggested fix on the pull request.
+# In your own repository, point `url` at your preview deployment and drop `demo-bug`:
+#
+#   - uses: Ankit-builds1/omnisight-forge@v1
+#     with:
+#       url: https://your-preview-url.example.com
+name: Layout check
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  layout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          url: https://books.toscrape.com/
+          demo-bug: OVERFLOW

@@ -1,0 +1,79 @@
+name: OmniSight Forge layout check
+description: >-
+  Check a web page at mobile, tablet and desktop size for elements that stick out, overlap or
+  hide their content, and comment the suggested CSS fixes on the pull request.
+branding:
+  icon: eye
+  color: blue
+
+inputs:
+  url:
+    description: Page to check, e.g. a preview deployment of the pull request.
+    required: true
+  viewports:
+    description: Space-separated viewports to check (mobile, tablet, desktop).
+    default: mobile tablet desktop
+  demo-bug:
+    description: Optional. Inject this bug first (OVERFLOW, OVERLAP or CLIPPING) to demo a repair.
+    default: ""
+  fail-on-findings:
+    description: Fail the check when anything is found.
+    default: "false"
+  comment:
+    description: Post the summary as a pull request comment.
+    default: "true"
+
+outputs:
+  findings:
+    description: Number of findings.
+    value: ${{ steps.check.outputs.findings }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install OmniSight Forge
+      shell: bash
+      run: |
+        python -m pip install --quiet "${{ github.action_path }}" -r "${{ github.action_path }}/requirements.txt"
+        python -m playwright install --with-deps chromium
+
+    - name: Check the page
+      id: check
+      shell: bash
+      env:
+        URL: ${{ inputs.url }}
+        VIEWPORTS: ${{ inputs.viewports }}
+        DEMO_BUG: ${{ inputs.demo-bug }}
+      run: |
+        args=(--url "$URL" --out forge-report)
+        for v in $VIEWPORTS; do args+=(--viewport "$v"); done
+        if [ -n "$DEMO_BUG" ]; then args+=(--demo-bug "$DEMO_BUG"); fi
+        python -m forge.report "${args[@]}"
+        count=$(python -c "import json; print(len(json.load(open('forge-report/findings.json'))))")
+        echo "findings=$count" >> "$GITHUB_OUTPUT"
+        cat forge-report/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload the report
+      uses: actions/upload-artifact@v4
+      with:
+        name: forge-report
+        path: forge-report
+
+    - name: Comment on the pull request
+      if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR: ${{ github.event.pull_request.number }}
+      run: gh pr comment "$PR" --repo "${{ github.repository }}" --body-file forge-report/summary.md --edit-last --create-if-none
+
+    - name: Fail on findings
+      if: inputs.fail-on-findings == 'true' && steps.check.outputs.findings != '0'
+      shell: bash
+      run: |
+        echo "OmniSight Forge found ${{ steps.check.outputs.findings }} layout problem(s)."
+        exit 1

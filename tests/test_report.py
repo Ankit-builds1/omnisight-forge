@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from playwright.sync_api import sync_playwright
 
@@ -68,6 +70,15 @@ def test_report_writes_fixes_css_by_viewport(page, tmp_path):
     assert "@media (min-width: 1280px)" in css
     assert f"{findings[0].selector} {{ width: auto !important; }}" in css
     assert "max-width: 767px" not in css
+
+
+def test_report_writes_a_summary_and_findings_json(page, tmp_path):
+    inject_bug(page, "#two", "width: 900px")
+    findings = check_page(page, "desktop", tmp_path)
+    write_report("https://example.com", findings, ["desktop"], tmp_path)
+    summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
+    assert "| desktop |" in summary and "`width: auto;`" in summary
+    assert len(json.loads((tmp_path / "findings.json").read_text(encoding="utf-8"))) == 1
 
 
 def test_report_says_when_nothing_is_found(tmp_path):
