@@ -305,28 +305,37 @@ The healer never sees the clean page or the gold fix. Then `forge.verify` judges
 against the clean page as before.
 
 Same run 8 answers, same 110 test samples, three settings (`forge.verify --heal 3`,
-`--heal 3 --whole-page`, `--no-model`):
+`--heal 3 --whole-page`, `--no-model`). Two versions of the clipping check:
+
+- v1: any element with hidden overflow whose content is taller than its box.
+- v2 (#63): also skips text hidden on purpose, i.e. screen-reader-only labels (a 1-2px box or a
+  `clip`) and text cut with an ellipsis.
 
 | | all | without flipkart (99) | wiki | wiki2 | sign-in | books | svelte | mdn | google | amazonjobs |
 |---|---|---|---|---|---|---|---|---|---|---|
 | model alone (run 8) | 13% | 14% | 50% | 0% | 0% | 7% | 8% | 0% | 0% | 31% |
-| browser alone, whole page, no model | 31% | 34% | 0% | 0% | 0% | 93% | 75% | 67% | 44% | 0% |
-| model + browser near its element | 42% | 46% | 71% | 54% | 67% | 43% | 33% | 33% | 33% | 38% |
-| **model + browser, whole page as fallback** | **56%** | **63%** | 71% | 54% | 67% | 93% | 83% | 67% | 44% | 25% |
+| v1: browser alone, no model | 31% | 34% | 0% | 0% | 0% | 93% | 75% | 67% | 44% | 0% |
+| v1: model + browser near its element | 42% | 46% | 71% | 54% | 67% | 43% | 33% | 33% | 33% | 38% |
+| v1: model + browser, whole page as fallback | 56% | 63% | 71% | 54% | 67% | 93% | 83% | 67% | 44% | 25% |
+| v2: model + browser near its element | 43% | 47% | 71% | 54% | 67% | 43% | 33% | 33% | 33% | 44% |
+| v2: model + browser, whole page as fallback | **71%** | **79%** | 93% | 92% | 67% | 93% | 83% | 67% | 44% | 75% |
+| **v2: browser alone, no model** | **71%** | **79%** | 93% | 92% | 67% | 93% | 75% | 67% | 44% | 81% |
 
-By bug type (model + browser, whole-page fallback): OVERFLOW 59%, CLIPPING 56%, OVERLAP 54%.
-Flipkart is 0% in every row: the model ran out of memory there, and the page scan alone found
-no fix that verified.
+v2 browser alone by bug type: CLIPPING 74%, OVERFLOW 71%, OVERLAP 68%. Flipkart is 0% in every
+row: no fix found there verified (and the model ran out of memory on those pages).
 
 Notes:
 
-- The model and the browser need each other. On wiki, wiki2 and sign-in the browser alone fixes
-  nothing: scanning from the top of a large page it reaches a harmless symptom first (a menu or a
-  scroll box) and changes the wrong element. Starting from the model's element it fixes 54% to
-  71%. On small pages such as books the scan alone is enough.
-- On amazonjobs the whole-page fallback lowers the score (38% to 25%): when nothing is found near
-  the model's element, the scan replaces an answer that was right with a wrong one.
+- With v1 the browser alone looked weak (0% on wiki, wiki2 and sign-in) and starting from the
+  model's element seemed to help. The cause was the check, not the model: scanning a large page
+  from the top, v1 first reached a screen-reader-only label, "fixed" it and changed the wrong
+  element. Once v2 skips text hidden on purpose, the browser alone scores 71%, the same as model +
+  browser.
+- So for these three bug types the fine-tuned model adds nothing over measuring the page: overflow,
+  overlap and clipping can be found from element boxes alone. Looking only near the model's element
+  (43%) is worse than scanning the whole page, because the model often points at the wrong area.
+  A screenshot model would matter for bugs that the DOM does not reveal (colours, images, text
+  drawn over other content), which this benchmark does not contain.
 - Limit: the three symptoms are the three bug types the factory injects, so this test suits the
   healer. Real pages break in more ways, and some symptoms are intended (a slider that hides
-  slides, text cut with an ellipsis). On real sites the healer should suggest fixes for review,
-  not apply them silently.
+  slides). On real sites the healer suggests fixes for review; it never applies them.
