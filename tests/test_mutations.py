@@ -6,6 +6,7 @@ from forge.mutations import (
     MUTATIONS,
     OVERFLOW,
     OVERLAP,
+    TRAIN_BUG_TYPES,
     MutationError,
     apply_declaration,
     mutate_clipping,
@@ -101,7 +102,7 @@ def test_empty_page_raises(make_page):
         mutate_overflow(page)
 
 def test_registry_covers_tier_one_types():
-    assert set(MUTATIONS) == {"OVERFLOW", "OVERLAP", "CLIPPING"}
+    assert set(TRAIN_BUG_TYPES) == {"OVERFLOW", "OVERLAP", "CLIPPING"}
 
 
 def test_overlap_mutation_overlaps_sibling(make_page):
@@ -130,7 +131,7 @@ def test_clipping_cuts_off_content(make_page):
     )
 
 
-@pytest.mark.parametrize("bug_type", sorted(MUTATIONS))
+@pytest.mark.parametrize("bug_type", sorted(TRAIN_BUG_TYPES))
 def test_every_mutation_gold_fix_restores_box(make_page, bug_type):
     mutate = MUTATIONS[bug_type]
     broken_page = make_page()
@@ -143,7 +144,7 @@ def test_every_mutation_gold_fix_restores_box(make_page, bug_type):
     assert rect(broken_page, mutation.target_selector) == pytest.approx(original, abs=0.5)
 
 
-@pytest.mark.parametrize("bug_type", sorted(MUTATIONS))
+@pytest.mark.parametrize("bug_type", sorted(TRAIN_BUG_TYPES))
 def test_bug_changes_the_layout_but_not_the_html(make_page, bug_type):
     clean = make_page()
     broken = make_page()
@@ -162,13 +163,13 @@ def test_rejected_attempt_is_undone(make_page):
     assert rect(page, selector) == before
 
 
-@pytest.mark.parametrize("bug_type", sorted(MUTATIONS))
+@pytest.mark.parametrize("bug_type", sorted(TRAIN_BUG_TYPES))
 def test_every_mutation_is_reproducible(make_page, bug_type):
     mutate = MUTATIONS[bug_type]
     assert mutate(make_page(), seed=5) == mutate(make_page(), seed=5)
 
 
-@pytest.mark.parametrize("bug_type", sorted(MUTATIONS))
+@pytest.mark.parametrize("bug_type", sorted(TRAIN_BUG_TYPES))
 def test_every_mutation_raises_on_empty_page(make_page, bug_type):
     page = make_page()
     page.set_content("<!doctype html><html><body></body></html>")

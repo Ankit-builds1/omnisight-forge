@@ -1,6 +1,6 @@
 from forge.build import build_dataset
 from forge.dataset import read_samples
-from forge.mutations import MUTATIONS
+from forge.mutations import TRAIN_BUG_TYPES
 
 PAGE = """<!doctype html><html><body style="margin:0">
 <div style="width:400px">
@@ -32,13 +32,13 @@ def test_builds_dataset_and_resumes(tmp_path):
     sites = {"demo": write_page(tmp_path)}
     opts = options(tmp_path)
     first = build_dataset(sites, **opts)
-    assert first.accepted == len(MUTATIONS)
-    assert len(read_samples(opts["samples_path"])) == len(MUTATIONS)
+    assert first.accepted == len(TRAIN_BUG_TYPES)
+    assert len(read_samples(opts["samples_path"])) == len(TRAIN_BUG_TYPES)
 
     second = build_dataset(sites, **opts)
     assert second.accepted == 0
-    assert second.skipped == len(MUTATIONS)
-    assert len(read_samples(opts["samples_path"])) == len(MUTATIONS)
+    assert second.skipped == len(TRAIN_BUG_TYPES)
+    assert len(read_samples(opts["samples_path"])) == len(TRAIN_BUG_TYPES)
 
 
 def test_rejections_are_counted_and_not_written(tmp_path):

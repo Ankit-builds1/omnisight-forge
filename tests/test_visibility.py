@@ -1,7 +1,7 @@
 import pytest
 from playwright.sync_api import sync_playwright
 
-from forge.mutations import MUTATIONS
+from forge.mutations import MUTATIONS, TRAIN_BUG_TYPES
 
 VIEWPORT = {"width": 400, "height": 300}
 HTML = """<!doctype html><html><body style="margin:0">
@@ -17,7 +17,7 @@ HTML = """<!doctype html><html><body style="margin:0">
 TOP_JS = "(selector) => document.querySelector(selector).getBoundingClientRect().top"
 
 
-@pytest.mark.parametrize("bug_type", sorted(MUTATIONS))
+@pytest.mark.parametrize("bug_type", sorted(TRAIN_BUG_TYPES))
 def test_mutation_targets_only_elements_inside_the_viewport(bug_type):
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
@@ -63,7 +63,7 @@ OVERFLOW_OK_JS = """
 """
 
 
-@pytest.mark.parametrize("bug_type", sorted(MUTATIONS))
+@pytest.mark.parametrize("bug_type", sorted(TRAIN_BUG_TYPES))
 def test_mutation_skips_offscreen_and_hidden_elements(bug_type):
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()

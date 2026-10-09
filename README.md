@@ -71,6 +71,11 @@ bug types: browser alone 71%, model + browser 71%, model alone 13%. An earlier v
 mistook screen-reader-only labels for clipped text, which made the model look useful (56% vs 31%);
 the full story is in [docs/RESULTS.md](docs/RESULTS.md).
 
+**But it does not generalise.** On three held-out bug types that look the same on screen but use
+different CSS (an element shifted with `left`, lifted with `transform`, text forced onto one line
+with `white-space: nowrap`), the same healer fixes **0%** of 109 bugs, while the gold fixes verify
+at 94%. Its 71% measures how well its rules match the bug factory, not layout repair in general.
+
 v0.2 result (with the leak): on 4 websites never seen in training, the healer repaired 69% of the
 measurable injected layout bugs, checked in a real browser (sign-in 100%, Wikipedia 86%).
 
@@ -87,6 +92,7 @@ while only 29% of its fixes actually repaired the page.
 | 7 | twice the training data (13 sites) | 65% of the same 26 samples |
 | 8 | hidden bugs, 26 training sites, 896px screenshots | 13% (9 sites, 110; zero-shot 0%) |
 | healer | browser measures the page and repairs it (v2 check) | **71%** (same 110; model + browser also 71%) |
+| healer | same healer on held-out bug types (SHIFT, LIFT, NOWRAP) | **0%** of 109 (gold 94%) |
 
 Runs 1 to 3 used exact text matching only; see [docs/RESULTS.md](docs/RESULTS.md). A gold-fix
 check showed that only 58% of the v7 test could be measured on live pages; with saved page

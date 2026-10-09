@@ -311,9 +311,140 @@ def mutate_clipping(page: Page, seed: int = 0, max_attempts: int = 10) -> Mutati
     raise MutationError("No element could be clipped.")
 
 
+# Held-out bug types. They break a page the same three ways (an element sticks out, covers
+# its neighbour, or its text no longer fits) but with CSS the healer's checks were not written for:
+# no width change, no negative margin, no fixed height. They test whether forge.heal generalises
+# beyond the bugs it was designed against; neither the healer nor the model saw them.
+SHIFT = "SHIFT"
+LIFT = "LIFT"
+NOWRAP = "NOWRAP"
+
+_SHIFT_CANDIDATES_JS = """
+() => {
+  //HELPERS//
+  const out = [];
+  for (const el of document.body.querySelectorAll('*')) {
+    if (skip.has(el.tagName)) continue;
+    const s = getComputedStyle(el);
+    if (s.position !== 'static' || s.display === 'inline') continue;
+    const rect = el.getBoundingClientRect();
+    const parentRect = el.parentElement.getBoundingClientRect();
+    if (rect.width < 20 || rect.height < 10 || parentRect.width <= 0 || !inView(rect)) continue;
+    if (!shown(el)) continue;
+    out.push({selector: selectorFor(el), parentWidth: parentRect.width});
+  }
+  return out;
+}
+"""
+
+_LIFT_CANDIDATES_JS = """
+() => {
+  //HELPERS//
+  const out = [];
+  for (const el of document.body.querySelectorAll('*')) {
+    if (skip.has(el.tagName)) continue;
+    const prev = el.previousElementSibling;
+    if (!prev || skip.has(prev.tagName)) continue;
+    if (getComputedStyle(el).transform !== 'none') continue;
+    const rect = el.getBoundingClientRect();
+    const prevRect = prev.getBoundingClientRect();
+    if (rect.width < 20 || rect.height < 10 || !inView(rect)) continue;
+    if (prevRect.width < 20 || prevRect.height < 10) continue;
+    if (!shown(el) || !shown(prev)) continue;
+    out.push({selector: selectorFor(el), height: rect.height, prevHeight: prevRect.height});
+  }
+  return out;
+}
+"""
+
+# Text that wraps onto several lines today; forcing one line makes it run out of its box.
+_NOWRAP_CANDIDATES_JS = """
+() => {
+  //HELPERS//
+  const out = [];
+  for (const el of document.body.querySelectorAll('*')) {
+    if (skip.has(el.tagName)) continue;
+    const s = getComputedStyle(el);
+    if (s.whiteSpace !== 'normal' || s.display === 'inline') continue;
+    const text = Array.from(el.childNodes)
+      .filter((n) => n.nodeType === 3).map((n) => n.textContent).join(' ').trim();
+    if (text.length < 40) continue;
+    const rect = el.getBoundingClientRect();
+    const lineHeight = parseFloat(s.lineHeight) || parseFloat(s.fontSize) * 1.2;
+    if (rect.height < 1.8 * lineHeight || !inView(rect) || !shown(el)) continue;
+    out.push({selector: selectorFor(el)});
+  }
+  return out;
+}
+"""
+
+_SHIFT_CHECK_JS = """
+(sel) => {
+  const el = document.querySelector(sel);
+  const r = el.getBoundingClientRect();
+  return r.right > el.parentElement.getBoundingClientRect().right + 1
+    || r.right > window.innerWidth;
+}
+"""
+
+_NOWRAP_CHECK_JS = """
+(sel) => {
+  const el = document.querySelector(sel);
+  return el.scrollWidth > el.clientWidth + 20;
+}
+"""
+
+
+def mutate_shift(page: Page, seed: int = 0, max_attempts: int = 10) -> Mutation:
+    """Push an element sideways out of its parent with relative positioning."""
+    rng = random.Random(seed)
+    candidates = _candidates(page, _SHIFT_CANDIDATES_JS)
+    rng.shuffle(candidates)
+    for candidate in candidates[:max_attempts]:
+        offset = int(max(80, candidate["parentWidth"] * rng.uniform(0.4, 0.8)))
+        broken_css = f"position: relative; left: {offset}px"
+        if _try_mutation(page, candidate["selector"], broken_css, _SHIFT_CHECK_JS):
+            return Mutation(SHIFT, candidate["selector"], "left", broken_css, "left: auto")
+    raise MutationError("No element could be shifted out of its parent.")
+
+
+def mutate_lift(page: Page, seed: int = 0, max_attempts: int = 10) -> Mutation:
+    """Move an element up over its sibling with a transform instead of a margin."""
+    rng = random.Random(seed)
+    candidates = _candidates(page, _LIFT_CANDIDATES_JS)
+    rng.shuffle(candidates)
+    for candidate in candidates[:max_attempts]:
+        smaller = min(candidate["prevHeight"], candidate["height"])
+        amount = max(16, int(smaller * rng.uniform(0.4, 0.9)))
+        broken_css = f"transform: translateY(-{amount}px)"
+        if _try_mutation(page, candidate["selector"], broken_css, _OVERLAP_CHECK_JS):
+            return Mutation(LIFT, candidate["selector"], "transform", broken_css, "transform: none")
+    raise MutationError("No element could be lifted over its sibling.")
+
+
+def mutate_nowrap(page: Page, seed: int = 0, max_attempts: int = 10) -> Mutation:
+    """Force wrapped text onto one line so that it runs out of its box."""
+    rng = random.Random(seed)
+    candidates = _candidates(page, _NOWRAP_CANDIDATES_JS)
+    rng.shuffle(candidates)
+    for candidate in candidates[:max_attempts]:
+        broken_css = "white-space: nowrap"
+        if _try_mutation(page, candidate["selector"], broken_css, _NOWRAP_CHECK_JS):
+            return Mutation(
+                NOWRAP, candidate["selector"], "white-space", broken_css, "white-space: normal"
+            )
+    raise MutationError("No text could be forced out of its box.")
+
+
 # Maps each bug type to its mutation function, so a dataset builder can loop over all types.
 MUTATIONS: dict[str, Callable[..., Mutation]] = {
     OVERFLOW: mutate_overflow,
     OVERLAP: mutate_overlap,
     CLIPPING: mutate_clipping,
+    SHIFT: mutate_shift,
+    LIFT: mutate_lift,
+    NOWRAP: mutate_nowrap,
 }
+# The healer and the model were built against these; the others are held out.
+TRAIN_BUG_TYPES = [OVERFLOW, OVERLAP, CLIPPING]
+HELD_OUT_BUG_TYPES = [SHIFT, LIFT, NOWRAP]

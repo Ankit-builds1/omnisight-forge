@@ -2,7 +2,7 @@ import pytest
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
-from forge.mutations import MUTATIONS
+from forge.mutations import MUTATIONS, TRAIN_BUG_TYPES
 from forge.pipeline import generate_sample
 from forge.scoring import gold_answer
 from forge.verify import LOAD_FAILED, _open, verify_fix
@@ -25,7 +25,7 @@ def make(tmp_path, bug_type):
     return url, sample
 
 
-@pytest.mark.parametrize("bug_type", sorted(MUTATIONS))
+@pytest.mark.parametrize("bug_type", sorted(TRAIN_BUG_TYPES))
 def test_gold_fix_is_fixed_and_broken_value_is_not(tmp_path, bug_type):
     url, sample = make(tmp_path, bug_type)
     gold = gold_answer(sample)
