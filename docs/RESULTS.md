@@ -339,3 +339,35 @@ Notes:
 - Limit: the three symptoms are the three bug types the factory injects, so this test suits the
   healer. Real pages break in more ways, and some symptoms are intended (a slider that hides
   slides). On real sites the healer suggests fixes for review; it never applies them.
+
+## Held-out bug types: the healer does not generalise
+
+The healer's checks and fixes were written against the factory's own bugs (a wider width, a
+negative top margin, a fixed height with hidden overflow), so 71% may only measure that match. To
+test this, three new bug types break the page the same visible ways with different CSS:
+
+| type | broken CSS | looks like | gold fix |
+|---|---|---|---|
+| SHIFT | `position: relative; left: Npx` | an element sticks out of its parent | `left: auto` |
+| LIFT | `transform: translateY(-Npx)` | an element covers the one above it | `transform: none` |
+| NOWRAP | `white-space: nowrap` | text runs out of its box | `white-space: normal` |
+
+Built on the same held-out test sites and snapshots (`forge.build --bug-types SHIFT LIFT NOWRAP`),
+109 samples. The healer was not changed.
+
+| | all (109) | SHIFT (42) | LIFT (47) | NOWRAP (20) |
+|---|---|---|---|---|
+| gold fixes (ceiling) | 94% | 93% | 96% | 95% |
+| **healer, browser alone** | **0%** | 0% | 0% | 0% |
+
+The gold check shows the samples are measurable (Flipkart excepted, 1 of 5). The healer fixes none.
+On most samples it finds no repair at all: it notices an element sticking out but only knows
+`width: auto` and `max-width: 100%`, which do not undo a shift; it ignores the lifted element
+because its overlap check requires a negative margin; and it does not look at text overflowing
+sideways. In the few cases where it does change something, it changes the wrong property.
+
+Conclusion: the healer's 71% measures a match between the bug factory and the healer's rules,
+not layout repair in general. Neither approach in this project generalises yet: the fine-tuned
+model reaches 13% on its own bug types and the rule-based healer 0% on unseen ones. A fair
+benchmark for this task needs bug types the repair method was not designed against, which is
+why these three are kept out of training and out of the healer's design.

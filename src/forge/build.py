@@ -12,7 +12,7 @@ from playwright.sync_api import Error as PlaywrightError
 
 from forge.capture import VIEWPORTS
 from forge.dataset import append_sample, read_samples
-from forge.mutations import MUTATIONS
+from forge.mutations import MUTATIONS, TRAIN_BUG_TYPES
 from forge.pipeline import Rejection, generate_sample, make_sample_id
 from forge.quality import DEFAULT_THRESHOLD, ImageSizeError
 
@@ -52,7 +52,7 @@ def build_dataset(
 ) -> BuildReport:
     """Generate samples for every site x viewport x bug type x seed combination."""
     viewports = list(viewports or VIEWPORTS)
-    bug_types = list(bug_types or MUTATIONS)
+    bug_types = list(bug_types or TRAIN_BUG_TYPES)
     path = Path(samples_path)
     done = {sample.sample_id for sample in read_samples(path)} if path.exists() else set()
     report = BuildReport()
