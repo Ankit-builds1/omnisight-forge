@@ -2,7 +2,7 @@ import pytest
 from PIL import Image
 
 from forge.dataset import Sample
-from forge.mutations import MUTATIONS
+from forge.mutations import TRAIN_BUG_TYPES
 from forge.pipeline import Rejection, generate_sample
 
 PAGE = """<!doctype html><html><body style="margin:0">
@@ -21,7 +21,7 @@ def page_url(tmp_path, html):
     return path.as_uri()
 
 
-@pytest.mark.parametrize("bug_type", sorted(MUTATIONS))
+@pytest.mark.parametrize("bug_type", sorted(TRAIN_BUG_TYPES))
 def test_generates_valid_sample(tmp_path, bug_type):
     url = page_url(tmp_path, PAGE)
     result = generate_sample(
@@ -37,7 +37,7 @@ def test_generates_valid_sample(tmp_path, bug_type):
         assert "<html" in handle.read()
 
 
-@pytest.mark.parametrize("bug_type", sorted(MUTATIONS))
+@pytest.mark.parametrize("bug_type", sorted(TRAIN_BUG_TYPES))
 def test_saved_html_shows_no_trace_of_the_bug(tmp_path, bug_type):
     url = page_url(tmp_path, PAGE)
     result = generate_sample(
