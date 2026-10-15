@@ -541,6 +541,89 @@ def mutate_margin(page: Page, seed: int = 0, max_attempts: int = 10) -> Mutation
     raise MutationError("No element could be pushed out with a margin.")
 
 
+# Held-out set 3: the final test. Built before the next healer is written and not opened (no
+# healer run on it) until that healer is frozen.
+PADDING = "PADDING"
+TOPNEG = "TOPNEG"
+FLEXROW = "FLEXROW"
+
+_FLEXROW_CANDIDATES_JS = """
+() => {
+  //HELPERS//
+  const out = [];
+  for (const el of document.body.querySelectorAll('*')) {
+    if (skip.has(el.tagName)) continue;
+    const s = getComputedStyle(el);
+    if (s.display !== 'block') continue;
+    const kids = Array.from(el.children).filter((k) => {
+      const r = k.getBoundingClientRect();
+      return !skip.has(k.tagName) && r.width >= 20 && r.height >= 10;
+    });
+    if (kids.length < 3) continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 100 || !inView(rect) || !shown(el)) continue;
+    out.push({selector: selectorFor(el)});
+  }
+  return out;
+}
+"""
+
+# Laid out in one row, the children no longer fit inside the element.
+_ROW_OVERFLOW_CHECK_JS = """
+(sel) => {
+  const el = document.querySelector(sel);
+  const right = el.getBoundingClientRect().right;
+  if (el.scrollWidth > el.clientWidth + 20) return true;
+  return Array.from(el.children).some((k) => k.getBoundingClientRect().right > right + 20);
+}
+"""
+
+
+def mutate_padding(page: Page, seed: int = 0, max_attempts: int = 10) -> Mutation:
+    """Widen an element past its parent with a large left padding."""
+    rng = random.Random(seed)
+    candidates = _candidates(page, _OVERFLOW_CANDIDATES_JS)
+    rng.shuffle(candidates)
+    for candidate in candidates[:max_attempts]:
+        padding = int(max(80, candidate["parentWidth"] * rng.uniform(0.5, 1.0)))
+        broken_css = f"padding-left: {padding}px"
+        original = page.evaluate(
+            "(s) => getComputedStyle(document.querySelector(s)).paddingLeft", candidate["selector"]
+        )
+        if _try_mutation(page, candidate["selector"], broken_css, _OVERFLOW_CHECK_JS):
+            return Mutation(
+                PADDING, candidate["selector"], "padding-left", broken_css,
+                f"padding-left: {original}",
+            )
+    raise MutationError("No element could be widened with padding.")
+
+
+def mutate_topneg(page: Page, seed: int = 0, max_attempts: int = 10) -> Mutation:
+    """Move an element up over its sibling with a negative relative offset."""
+    rng = random.Random(seed)
+    candidates = _candidates(page, _LIFT_CANDIDATES_JS)
+    rng.shuffle(candidates)
+    for candidate in candidates[:max_attempts]:
+        smaller = min(candidate["prevHeight"], candidate["height"])
+        amount = max(16, int(smaller * rng.uniform(0.4, 0.9)))
+        broken_css = f"position: relative; top: -{amount}px"
+        if _try_mutation(page, candidate["selector"], broken_css, _OVERLAP_CHECK_JS):
+            return Mutation(TOPNEG, candidate["selector"], "top", broken_css, "top: auto")
+    raise MutationError("No element could be moved up over its sibling.")
+
+
+def mutate_flexrow(page: Page, seed: int = 0, max_attempts: int = 10) -> Mutation:
+    """Turn a block container into a one-row flexbox so its children run out of it."""
+    rng = random.Random(seed)
+    candidates = _candidates(page, _FLEXROW_CANDIDATES_JS)
+    rng.shuffle(candidates)
+    for candidate in candidates[:max_attempts]:
+        broken_css = "display: flex; flex-wrap: nowrap"
+        if _try_mutation(page, candidate["selector"], broken_css, _ROW_OVERFLOW_CHECK_JS):
+            return Mutation(FLEXROW, candidate["selector"], "display", broken_css, "display: block")
+    raise MutationError("No container could be forced into one overflowing row.")
+
+
 # Maps each bug type to its mutation function, so a dataset builder can loop over all types.
 MUTATIONS: dict[str, Callable[..., Mutation]] = {
     OVERFLOW: mutate_overflow,
@@ -552,9 +635,14 @@ MUTATIONS: dict[str, Callable[..., Mutation]] = {
     MINWIDTH: mutate_minwidth,
     ABSOLUTE: mutate_absolute,
     MARGIN: mutate_margin,
+    PADDING: mutate_padding,
+    TOPNEG: mutate_topneg,
+    FLEXROW: mutate_flexrow,
 }
 # The healer and the model were built against these; the others are held out.
 TRAIN_BUG_TYPES = [OVERFLOW, OVERLAP, CLIPPING]
 HELD_OUT_BUG_TYPES = [SHIFT, LIFT, NOWRAP]
 # Set 2 was written before healer v3 and is used only to report v3.
 HELD_OUT_2_BUG_TYPES = [MINWIDTH, ABSOLUTE, MARGIN]
+# Set 3 is the final test: no healer is run on it until the healer is frozen.
+HELD_OUT_3_BUG_TYPES = [PADDING, TOPNEG, FLEXROW]

@@ -250,7 +250,143 @@ def heal_v3(
     return None
 
 
-HEALERS = {"v2": heal, "v3": heal_v3}
+# Healer v4 ---------------------------------------------------------------------------------------
+# v3 often "repairs" an element that overlaps on purpose (a menu, an icon) because reverting its
+# position removes that one symptom. v4 adds three rules:
+# 1. Known fixes first: the v2 fixes, which are right for the most common bugs.
+# 2. Overlap that looks deliberate is not a symptom: fixed or sticky elements, positioned
+#    elements with a z-index, and small overlays (badges, icons) that cover under a quarter of
+#    the neighbour they sit on.
+# 3. A revert only counts if it lowers the number of symptoms on the whole page.
+_SYMPTOMS_V4_JS = _SYMPTOMS_V3_JS.replace(
+    """    covers: (el) => {
+      if (!visible(el)) return false;""",
+    """    covers: (el) => {
+      if (!visible(el)) return false;
+      const st = getComputedStyle(el);
+      if (st.position === 'fixed' || st.position === 'sticky') return false;
+      if (st.position !== 'static' && st.zIndex !== 'auto') return false;""",
+).replace(
+    "        if (sib && visible(sib) && boxOverlap(a, sib.getBoundingClientRect()))"
+    " return true;",
+    """        if (!sib || !visible(sib)) continue;
+        const b = sib.getBoundingClientRect();
+        const small = a.width * a.height < 0.25 * b.width * b.height;
+        if (st.position !== 'static' && small) continue;
+        if (boxOverlap(a, b)) return true;""",
+)
+assert _SYMPTOMS_V4_JS != _SYMPTOMS_V3_JS
+
+_FIND_V4_JS = _FIND_JS.replace(_SYMPTOMS_JS, _SYMPTOMS_V4_JS)
+
+_COUNT_V4_JS = (
+    """
+() => {
+  //SYMPTOMS//
+  let count = 0;
+  for (const el of document.body.querySelectorAll('*')) {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.bottom < 0 || r.top > window.innerHeight) continue;
+    for (const test of Object.values(symptoms)) if (test(el)) count += 1;
+  }
+  return count;
+}
+"""
+    .replace("//SYMPTOMS//", _SYMPTOMS_V4_JS)
+)
+
+_TRY_V4_JS = (
+    """
+([sel, kind, prop, val, before]) => {
+  //SYMPTOMS//
+  const countAll = () => {
+    let count = 0;
+    for (const e of document.body.querySelectorAll('*')) {
+      const r = e.getBoundingClientRect();
+      if (r.width === 0 || r.bottom < 0 || r.top > window.innerHeight) continue;
+      for (const test of Object.values(symptoms)) if (test(e)) count += 1;
+    }
+    return count;
+  };
+  const el = document.querySelector(sel);
+  const old = el.style.getPropertyValue(prop);
+  const oldPriority = el.style.getPropertyPriority(prop);
+  el.style.setProperty(prop, val, 'important');
+  const box = el.getBoundingClientRect();
+  const cured = !symptoms[kind](el) && box.width >= 1 && box.height >= 1
+    && countAll() < before;
+  if (old) el.style.setProperty(prop, old, oldPriority);
+  else el.style.removeProperty(prop);
+  return cured;
+}
+"""
+    .replace("//SYMPTOMS//", _SYMPTOMS_V4_JS)
+)
+
+# Most sick elements v4 tries per page, so a large page stays fast.
+V4_MAX_HITS = 30
+
+
+# Symptoms left on the whole page after applying one fix (the fix is then undone).
+_COUNT_AFTER_V4_JS = (
+    """
+([sel, prop, val]) => {
+  //SYMPTOMS//
+  const el = document.querySelector(sel);
+  const old = el.style.getPropertyValue(prop);
+  const oldPriority = el.style.getPropertyPriority(prop);
+  el.style.setProperty(prop, val, 'important');
+  let count = 0;
+  for (const e of document.body.querySelectorAll('*')) {
+    const r = e.getBoundingClientRect();
+    if (r.width === 0 || r.bottom < 0 || r.top > window.innerHeight) continue;
+    for (const test of Object.values(symptoms)) if (test(e)) count += 1;
+  }
+  if (old) el.style.setProperty(prop, old, oldPriority);
+  else el.style.removeProperty(prop);
+  return count;
+}
+"""
+    .replace("//SYMPTOMS//", _SYMPTOMS_V4_JS)
+)
+
+
+def _symptoms_after(page: Page, repair: Repair) -> int:
+    return page.evaluate(_COUNT_AFTER_V4_JS, [repair.selector, repair.property, repair.value])
+
+
+def heal_v4(
+    page: Page, selector: str, radius: int = DEFAULT_RADIUS, limit: int = MAX_ELEMENTS
+) -> Repair | None:
+    """The known fix (v2) and the best revert compete; the page with fewer symptoms wins.
+
+    Trying the known fix first stopped at a wrong element whenever `width: auto` happened to
+    remove some symptom, so both are found and compared on the whole page; a tie goes to the
+    known fix.
+    """
+    known = heal(page, selector, radius, limit)
+    generic = _revert_search(page, selector, radius, limit)
+    if known is None or generic is None:
+        return known or generic
+    if _symptoms_after(page, generic) < _symptoms_after(page, known):
+        return generic
+    return known
+
+
+def _revert_search(page: Page, selector: str, radius: int, limit: int) -> Repair | None:
+    """First revert, nearest sick element first, that cures it and lowers the page's symptoms."""
+    hits = page.evaluate(_FIND_V4_JS, [selector, radius, limit])
+    hits.sort(key=lambda hit: (hit["kind"] == "spills", hit["distance"]))
+    before = page.evaluate(_COUNT_V4_JS)
+    for hit in hits[:V4_MAX_HITS]:
+        for prop in REVERT_PROPERTIES:
+            args = [hit["selector"], hit["kind"], prop, "revert", before]
+            if page.evaluate(_TRY_V4_JS, args):
+                return Repair(hit["selector"], prop, "revert", hit["kind"], hit["distance"])
+    return None
+
+
+HEALERS = {"v2": heal, "v3": heal_v3, "v4": heal_v4}
 
 
 def healed_answer(

@@ -192,7 +192,8 @@ def main(argv: list[str] | None = None) -> None:
         help="ignore the answers: the browser scans the whole page on its own (a baseline)",
     )
     parser.add_argument(
-        "--healer", choices=["v2", "v3"], default="v2", help="which forge.heal version repairs"
+        "--healer", choices=["v2", "v3", "v4"], default="v2",
+        help="which forge.heal version repairs",
     )
     args = parser.parse_args(argv)
     if args.no_model:

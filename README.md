@@ -80,6 +80,11 @@ and reverts one layout property at a time to the browser default. It fixes 33% a
 held-out sets (0% for v2) but only 24% of the original types, mostly because it "repairs"
 elements that overlap on purpose, like menus.
 
+**Final number.** Healer v4 lets the known fix and the generic revert compete and keeps the one
+that leaves fewer problems on the page. On a third held-out set of bug types, built before v4 and
+run once, it repairs **25%** of 104 bugs (the gold fixes verify at 84%). That is the honest
+measure of how well it handles bugs it was not designed for.
+
 v0.2 result (with the leak): on 4 websites never seen in training, the healer repaired 69% of the
 measurable injected layout bugs, checked in a real browser (sign-in 100%, Wikipedia 86%).
 
@@ -98,6 +103,8 @@ while only 29% of its fixes actually repaired the page.
 | healer | browser measures the page and repairs it (v2 check) | **71%** (same 110; model + browser also 71%) |
 | healer | same healer on held-out bug types (SHIFT, LIFT, NOWRAP) | **0%** of 109 (gold 94%) |
 | healer v3 | generic symptoms, reverts one layout property at a time | held-out 1: **33%**, held-out 2: **43%** (gold 88%); original types 24% |
+| healer v4 | known fix and revert compete; deliberate overlaps ignored | original 57%, held-out 1-2: 38% / 45% |
+| **healer v4, final test** | held-out set 3, built before v4 and run once | **25%** of 104 (gold 84%) |
 
 Runs 1 to 3 used exact text matching only; see [docs/RESULTS.md](docs/RESULTS.md). A gold-fix
 check showed that only 58% of the v7 test could be measured on live pages; with saved page
