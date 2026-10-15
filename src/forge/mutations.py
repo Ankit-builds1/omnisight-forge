@@ -436,6 +436,111 @@ def mutate_nowrap(page: Page, seed: int = 0, max_attempts: int = 10) -> Mutation
     raise MutationError("No text could be forced out of its box.")
 
 
+# Held-out set 2, written before healer v3: three more common real-world layout mistakes.
+MINWIDTH = "MINWIDTH"
+ABSOLUTE = "ABSOLUTE"
+MARGIN = "MARGIN"
+
+_ABSOLUTE_CANDIDATES_JS = """
+() => {
+  //HELPERS//
+  const out = [];
+  for (const el of document.body.querySelectorAll('*')) {
+    if (skip.has(el.tagName)) continue;
+    const next = el.nextElementSibling;
+    if (!next || skip.has(next.tagName)) continue;
+    if (getComputedStyle(el).position !== 'static') continue;
+    const rect = el.getBoundingClientRect();
+    const nextRect = next.getBoundingClientRect();
+    if (rect.width < 20 || rect.height < 10 || !inView(rect)) continue;
+    if (nextRect.width < 20 || nextRect.height < 10) continue;
+    if (!shown(el) || !shown(next)) continue;
+    out.push({selector: selectorFor(el)});
+  }
+  return out;
+}
+"""
+
+_MARGIN_CANDIDATES_JS = """
+() => {
+  //HELPERS//
+  const out = [];
+  for (const el of document.body.querySelectorAll('*')) {
+    if (skip.has(el.tagName)) continue;
+    const s = getComputedStyle(el);
+    if (s.display === 'inline' || !s.marginLeft.endsWith('px')) continue;
+    const rect = el.getBoundingClientRect();
+    const parentRect = el.parentElement.getBoundingClientRect();
+    if (rect.width < 20 || rect.height < 10 || parentRect.width <= 0 || !inView(rect)) continue;
+    if (!shown(el)) continue;
+    out.push({selector: selectorFor(el), parentWidth: parentRect.width, marginLeft: s.marginLeft});
+  }
+  return out;
+}
+"""
+
+# Once taken out of the flow, the element and the sibling after it end up on top of each other.
+_UNDER_NEXT_CHECK_JS = """
+(sel) => {
+  const el = document.querySelector(sel);
+  const a = el.getBoundingClientRect();
+  const b = el.nextElementSibling.getBoundingClientRect();
+  const vertical = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+  const horizontal = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+  return vertical >= 8 && horizontal >= 20;
+}
+"""
+
+
+def mutate_minwidth(page: Page, seed: int = 0, max_attempts: int = 10) -> Mutation:
+    """Give an element a minimum width larger than its parent."""
+    rng = random.Random(seed)
+    candidates = _candidates(page, _OVERFLOW_CANDIDATES_JS)
+    rng.shuffle(candidates)
+    for candidate in candidates[:max_attempts]:
+        wider = candidate["parentWidth"] * rng.uniform(1.5, 2.5)
+        minimum = int(max(wider, candidate["width"] + 200))
+        broken_css = f"min-width: {minimum}px"
+        if _try_mutation(page, candidate["selector"], broken_css, _OVERFLOW_CHECK_JS):
+            original = page.evaluate(
+                "(s) => document.querySelector(s).style.minWidth || 'auto'", candidate["selector"]
+            )
+            return Mutation(
+                MINWIDTH, candidate["selector"], "min-width", broken_css, f"min-width: {original}"
+            )
+    raise MutationError("No element could be given a too large minimum width.")
+
+
+def mutate_absolute(page: Page, seed: int = 0, max_attempts: int = 10) -> Mutation:
+    """Take an element out of the flow, so that the next element slides under it."""
+    rng = random.Random(seed)
+    candidates = _candidates(page, _ABSOLUTE_CANDIDATES_JS)
+    rng.shuffle(candidates)
+    for candidate in candidates[:max_attempts]:
+        broken_css = "position: absolute"
+        if _try_mutation(page, candidate["selector"], broken_css, _UNDER_NEXT_CHECK_JS):
+            return Mutation(
+                ABSOLUTE, candidate["selector"], "position", broken_css, "position: static"
+            )
+    raise MutationError("No element could be taken out of the flow over its neighbour.")
+
+
+def mutate_margin(page: Page, seed: int = 0, max_attempts: int = 10) -> Mutation:
+    """Push an element out of its parent with a large left margin."""
+    rng = random.Random(seed)
+    candidates = _candidates(page, _MARGIN_CANDIDATES_JS)
+    rng.shuffle(candidates)
+    for candidate in candidates[:max_attempts]:
+        margin = int(max(80, candidate["parentWidth"] * rng.uniform(0.4, 0.8)))
+        broken_css = f"margin-left: {margin}px"
+        if _try_mutation(page, candidate["selector"], broken_css, _SHIFT_CHECK_JS):
+            return Mutation(
+                MARGIN, candidate["selector"], "margin-left", broken_css,
+                f"margin-left: {candidate['marginLeft']}",
+            )
+    raise MutationError("No element could be pushed out with a margin.")
+
+
 # Maps each bug type to its mutation function, so a dataset builder can loop over all types.
 MUTATIONS: dict[str, Callable[..., Mutation]] = {
     OVERFLOW: mutate_overflow,
@@ -444,7 +549,12 @@ MUTATIONS: dict[str, Callable[..., Mutation]] = {
     SHIFT: mutate_shift,
     LIFT: mutate_lift,
     NOWRAP: mutate_nowrap,
+    MINWIDTH: mutate_minwidth,
+    ABSOLUTE: mutate_absolute,
+    MARGIN: mutate_margin,
 }
 # The healer and the model were built against these; the others are held out.
 TRAIN_BUG_TYPES = [OVERFLOW, OVERLAP, CLIPPING]
 HELD_OUT_BUG_TYPES = [SHIFT, LIFT, NOWRAP]
+# Set 2 was written before healer v3 and is used only to report v3.
+HELD_OUT_2_BUG_TYPES = [MINWIDTH, ABSOLUTE, MARGIN]

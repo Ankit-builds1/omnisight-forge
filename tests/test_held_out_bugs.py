@@ -2,14 +2,21 @@ import pytest
 from playwright.sync_api import sync_playwright
 
 from forge.mutations import (
+    ABSOLUTE,
+    HELD_OUT_2_BUG_TYPES,
     HELD_OUT_BUG_TYPES,
     LIFT,
+    MARGIN,
+    MINWIDTH,
     MUTATIONS,
     NOWRAP,
     SHIFT,
     TRAIN_BUG_TYPES,
     apply_declaration,
+    mutate_absolute,
     mutate_lift,
+    mutate_margin,
+    mutate_minwidth,
     mutate_nowrap,
     mutate_shift,
 )
@@ -51,13 +58,17 @@ def box(page, selector):
 
 def test_held_out_types_are_separate_from_training_types():
     assert set(HELD_OUT_BUG_TYPES).isdisjoint(TRAIN_BUG_TYPES)
-    assert set(HELD_OUT_BUG_TYPES) | set(TRAIN_BUG_TYPES) == set(MUTATIONS)
+    assert set(HELD_OUT_2_BUG_TYPES).isdisjoint(set(TRAIN_BUG_TYPES) | set(HELD_OUT_BUG_TYPES))
+    assert (
+        set(HELD_OUT_BUG_TYPES) | set(HELD_OUT_2_BUG_TYPES) | set(TRAIN_BUG_TYPES) == set(MUTATIONS)
+    )
 
 
 @pytest.mark.parametrize(
     ("mutate", "bug_type", "prop"),
     [(mutate_shift, SHIFT, "left"), (mutate_lift, LIFT, "transform"),
-     (mutate_nowrap, NOWRAP, "white-space")],
+     (mutate_nowrap, NOWRAP, "white-space"), (mutate_minwidth, MINWIDTH, "min-width"),
+     (mutate_absolute, ABSOLUTE, "position"), (mutate_margin, MARGIN, "margin-left")],
 )
 def test_held_out_bug_breaks_the_page_and_gold_fix_restores_it(page, mutate, bug_type, prop):
     before = page.evaluate("() => document.body.scrollWidth")

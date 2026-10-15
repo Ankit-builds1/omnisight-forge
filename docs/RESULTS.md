@@ -371,3 +371,54 @@ not layout repair in general. Neither approach in this project generalises yet: 
 model reaches 13% on its own bug types and the rule-based healer 0% on unseen ones. A fair
 benchmark for this task needs bug types the repair method was not designed against, which is
 why these three are kept out of training and out of the healer's design.
+
+## Healer v3: generic symptoms, revert one property at a time
+
+v3 (`forge.verify --healer v3`) does not guess a property. Its symptoms are geometric only: an
+element sticks out of its parent or the viewport, covers its previous or next sibling, or hides
+or spills its content (screen-reader text and ellipses excepted, as in v2). For a sick element it
+reverts one of 25 standard layout properties at a time to the browser default (`prop: revert`):
+position and offsets, transform, float, margins, sizes and their min/max, horizontal padding,
+white-space, flex-basis/shrink, letter/word spacing and text-indent. It keeps the first revert
+that removes the symptom without collapsing the element to zero size, and it repairs misplaced
+elements before the containers they make spill.
+
+A second held-out set was built before v3 was written, with three more common mistakes:
+
+| type | broken CSS | looks like |
+|---|---|---|
+| MINWIDTH | `min-width: Npx` | an element sticks out of its parent |
+| ABSOLUTE | `position: absolute` | the next element slides under it |
+| MARGIN | `margin-left: Npx` | an element is pushed out sideways |
+
+Browser alone, no model, same 9 held-out sites and snapshots:
+
+| test set | gold fixes | v2 | **v3** |
+|---|---|---|---|
+| original types (OVERFLOW, OVERLAP, CLIPPING) | 96% | **71%** (110) | 24% (127) |
+| held-out set 1 (SHIFT, LIFT, NOWRAP), 109 | 94% | 0% | **33%** |
+| held-out set 2 (MINWIDTH, ABSOLUTE, MARGIN), 131 | 88% | 0% | **43%** |
+
+v3 on set 2 by type: ABSOLUTE 48%, MINWIDTH 51%, MARGIN 28%. On set 1: SHIFT 50%, LIFT 32%,
+NOWRAP 0%. The v2 row on the original types is the earlier 110-sample run (samples with a model
+answer); v3 ran on all 127.
+
+How blind the held-out numbers are:
+
+- Set 1 was built before v3, but its 0% for v2 is what motivated v3.
+- Set 2 was built before v3's code. Its property list was meant as the standard layout
+  properties, yet it contains `min-width`, `position` and `margin-left`, and the rule "repair
+  misplaced elements before spilling containers" was added while writing a unit test with a
+  margin bug. So set 2 is mostly, not fully, unseen.
+- A third set, built and kept unopened until the next healer is final, will give the clean
+  number.
+
+Notes:
+
+- v3 trades the specialist's in-distribution score (71% to 24%) for some generalisation (0% to
+  33-43%). Neither is good enough to apply fixes without review.
+- Its main failure is `position: revert` on the wrong element: large pages contain elements that
+  are positioned on purpose (menus, icons, overlays) and overlap their neighbours by design. v3
+  reaches one of those first and "repairs" it, so wiki2, svelte and sign-in fall to 0-15%.
+- Text that runs out sideways (NOWRAP) is detected but no revert in the list removes it, because
+  the element's own box is unchanged; the spill shows on the text, not the element.

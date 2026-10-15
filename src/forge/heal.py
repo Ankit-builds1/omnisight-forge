@@ -167,23 +167,111 @@ def _as_answer(repair: Repair) -> dict[str, str]:
     return {"selector": repair.selector, "property": repair.property, "value": repair.value}
 
 
+# Healer v3 ---------------------------------------------------------------------------------------
+# v2 knows one fix per symptom (width: auto, margin-top: 0px, height: auto), the exact inverse of
+# the bug factory, and fixes 0% of the held-out bug types. v3 does not guess the property. Its
+# symptoms are geometric only (sticks out, covers a neighbour, hides or spills its content), and
+# for a sick element it reverts one layout property at a time to the browser default
+# (`revert`) and keeps the first one that removes the symptom. The property list is the standard
+# CSS box, positioning, sizing and text-wrapping properties, not a list of the injected bugs.
+REVERT_PROPERTIES = [
+    "position", "left", "right", "top", "bottom", "transform", "float",
+    "margin-left", "margin-right", "margin-top", "margin-bottom",
+    "width", "min-width", "max-width", "height", "min-height", "max-height",
+    "padding-left", "padding-right", "white-space", "flex-basis", "flex-shrink",
+    "letter-spacing", "word-spacing", "text-indent",
+]
+
+_SYMPTOMS_V3_JS = """
+  const boxOverlap = (a, b) => {
+    const vertical = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+    const horizontal = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+    return vertical >= 8 && horizontal >= 20;
+  };
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width >= 20 && r.height >= 10;
+  };
+  const symptoms = {
+    sticks_out: (el) => {
+      const parent = el.parentElement;
+      if (!parent || parent === document.documentElement) return false;
+      const a = el.getBoundingClientRect();
+      const b = parent.getBoundingClientRect();
+      if (a.width === 0) return false;
+      return a.right > b.right + 20 || a.left < b.left - 20 || a.right > window.innerWidth + 1;
+    },
+    covers: (el) => {
+      if (!visible(el)) return false;
+      const a = el.getBoundingClientRect();
+      for (const sib of [el.previousElementSibling, el.nextElementSibling]) {
+        if (sib && visible(sib) && boxOverlap(a, sib.getBoundingClientRect())) return true;
+      }
+      return false;
+    },
+    spills: (el) => {
+      const s = getComputedStyle(el);
+      if (el.clientWidth <= 2 || el.clientHeight <= 2) return false;
+      if (s.clip !== 'auto' || s.clipPath !== 'none' || s.textOverflow === 'ellipsis') {
+        return false;
+      }
+      const hiddenY = s.overflowY === 'hidden' || s.overflowY === 'clip';
+      if (hiddenY && el.scrollHeight > el.clientHeight + 1) return true;
+      return s.overflowX === 'visible' && el.scrollWidth > el.clientWidth + 20;
+    },
+  };
+"""
+
+_FIND_V3_JS = _FIND_JS.replace(_SYMPTOMS_JS, _SYMPTOMS_V3_JS)
+
+# A fix only counts if the element is still there afterwards: collapsing it to zero size also
+# removes every symptom.
+_TRY_V3_JS = _TRY_JS.replace(_SYMPTOMS_JS, _SYMPTOMS_V3_JS).replace(
+    "const cured = !symptoms[kind](el);",
+    "const box = el.getBoundingClientRect();\n"
+    "  const cured = !symptoms[kind](el) && box.width >= 1 && box.height >= 1;",
+)
+
+
+def heal_v3(
+    page: Page, selector: str, radius: int = DEFAULT_RADIUS, limit: int = MAX_ELEMENTS
+) -> Repair | None:
+    """Nearest sick element around `selector`; revert one layout property at a time.
+
+    An element that is out of place makes its container spill too, so misplaced elements are
+    repaired before containers that spill.
+    """
+    hits = page.evaluate(_FIND_V3_JS, [selector, radius, limit])
+    hits.sort(key=lambda hit: (hit["kind"] == "spills", hit["distance"]))
+    for hit in hits:
+        for prop in REVERT_PROPERTIES:
+            if page.evaluate(_TRY_V3_JS, [hit["selector"], hit["kind"], prop, "revert"]):
+                return Repair(hit["selector"], prop, "revert", hit["kind"], hit["distance"])
+    return None
+
+
+HEALERS = {"v2": heal, "v3": heal_v3}
+
+
 def healed_answer(
     page: Page,
     answer: dict[str, str] | None,
     radius: int = DEFAULT_RADIUS,
     whole_page: bool = False,
+    healer: str = "v2",
 ) -> dict[str, str] | None:
     """The model's answer, replaced by a repair the browser confirmed.
 
     The browser looks around the model's element first. With `whole_page`, it scans the whole
     page when nothing is found there (or when the model gave no answer).
     """
+    run = HEALERS[healer]
     if answer is not None:
-        repair = heal(page, answer["selector"], radius)
+        repair = run(page, answer["selector"], radius)
         if repair is not None:
             return _as_answer(repair)
     if whole_page:
-        repair = scan_page(page)
+        repair = run(page, "body", PAGE_RADIUS, PAGE_MAX_ELEMENTS)
         if repair is not None:
             return _as_answer(repair)
     return answer

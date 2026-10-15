@@ -85,6 +85,7 @@ def verify_fix(
     snapshots: Path | str | None = None,
     heal_radius: int | None = None,
     whole_page: bool = False,
+    healer: str = "v2",
 ) -> Verdict:
     """Rebuild the sample's bug on `url`, apply `answer` and compare with the clean page.
 
@@ -131,7 +132,7 @@ def verify_fix(
             else:
                 note = ""
             if healing:
-                healed = healed_answer(page, answer, heal_radius or 0, whole_page)
+                healed = healed_answer(page, answer, heal_radius or 0, whole_page, healer)
                 if healed is not None and healed != answer:
                     note = f"healed: {healed['property']}: {healed['value']}"
                 answer = healed
@@ -190,6 +191,9 @@ def main(argv: list[str] | None = None) -> None:
         "--no-model", action="store_true",
         help="ignore the answers: the browser scans the whole page on its own (a baseline)",
     )
+    parser.add_argument(
+        "--healer", choices=["v2", "v3"], default="v2", help="which forge.heal version repairs"
+    )
     args = parser.parse_args(argv)
     if args.no_model:
         args.whole_page = True
@@ -215,7 +219,7 @@ def main(argv: list[str] | None = None) -> None:
             answer = None
         verdict = verify_fix(
             sites[sample.site], sample, answer, out / "png", args.snapshots, args.heal,
-            args.whole_page,
+            args.whole_page, args.healer,
         )
         text_ok = score_answer(answer, sample).success
         rows.append(
