@@ -24,7 +24,7 @@ from pathlib import Path
 from playwright.sync_api import Page, sync_playwright
 
 from forge.capture import SCREENSHOT, VIEWPORTS, close_browser, close_page, open_page, settle
-from forge.heal import _SYMPTOMS_JS, FIXES, PAGE_MAX_ELEMENTS, PAGE_RADIUS, find_symptoms
+from forge.heal import page_repairs
 from forge.mutations import MUTATIONS, MutationError
 
 # Most findings reported per viewport, so a page full of intended symptoms stays readable.
@@ -33,9 +33,9 @@ MAX_FINDINGS = 10
 MARGIN = 40
 
 PROBLEMS = {
-    "overflow": "sticks out of its parent",
-    "overlap": "is pulled over the element above it",
-    "clipping": "hides part of its own content",
+    "sticks_out": "sticks out of its parent or the screen",
+    "covers": "covers the element next to it",
+    "spills": "hides or spills part of its content",
 }
 
 _RECT_JS = """
@@ -62,12 +62,6 @@ _RESTORE_JS = """
 }
 """
 
-_STILL_SICK_JS = """
-([sel, kind]) => {
-  //SYMPTOMS//
-  return symptoms[kind](document.querySelector(sel));
-}
-""".replace("//SYMPTOMS//", _SYMPTOMS_JS)
 
 
 @dataclass(frozen=True)
@@ -94,39 +88,26 @@ def _clip(page: Page, selector: str, viewport: str) -> dict:
     return {"x": x, "y": y, "width": max(1, right - x), "height": max(1, bottom - y)}
 
 
-def _still_sick(page: Page, selector: str, kind: str) -> bool:
-    return page.evaluate(_STILL_SICK_JS, [selector, kind])
-
 
 def check_page(page: Page, viewport: str, out: Path) -> list[Finding]:
     """Find symptoms on the loaded page, try fixes and save before/after pictures."""
     findings = []
-    hits = find_symptoms(page, "body", PAGE_RADIUS, PAGE_MAX_ELEMENTS)
-    for hit in hits:
-        if len(findings) == MAX_FINDINGS:
-            break
-        selector, kind = hit["selector"], hit["kind"]
+    for repair in page_repairs(page, MAX_FINDINGS):
+        selector, prop, value = repair.selector, repair.property, repair.value
         clip = _clip(page, selector, viewport)
         name = f"{viewport}_{len(findings) + 1}"
         before = out / f"{name}_before.png"
+        after = out / f"{name}_after.png"
         # A red outline marks the element in both pictures; outlines do not change the layout.
         mark = page.evaluate(_SET_JS, [selector, "outline", "3px solid red"])
         page.screenshot(path=str(before), clip=clip, **SCREENSHOT)
-        for prop, value in FIXES[kind]:
-            old = page.evaluate(_SET_JS, [selector, prop, value])
-            cured = not _still_sick(page, selector, kind)
-            if cured:
-                after = out / f"{name}_after.png"
-                page.screenshot(path=str(after), clip=clip, **SCREENSHOT)
-            page.evaluate(_RESTORE_JS, [selector, prop, old])
-            if cured:
-                findings.append(
-                    Finding(viewport, selector, kind, prop, value, before.name, after.name)
-                )
-                break
-        else:
-            before.unlink(missing_ok=True)
+        old = page.evaluate(_SET_JS, [selector, prop, value])
+        page.screenshot(path=str(after), clip=clip, **SCREENSHOT)
+        page.evaluate(_RESTORE_JS, [selector, prop, old])
         page.evaluate(_RESTORE_JS, [selector, "outline", mark])
+        findings.append(
+            Finding(viewport, selector, repair.kind, prop, value, before.name, after.name)
+        )
     return findings
 
 
