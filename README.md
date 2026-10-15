@@ -125,9 +125,11 @@ py -3.12 -m venv .venv
 
 ## Check any web page
 
-`forge.report` opens a page at mobile, tablet and desktop size, looks for elements that stick out
-of their parent, overlap the element above them or hide part of their content, and writes an
-HTML report with a suggested CSS fix and before/after pictures for each finding. It runs on a
+`forge.report` opens a page at mobile, tablet and desktop size and runs healer v4: it looks for
+elements that stick out of their parent or the screen, cover a neighbour, or hide or spill their
+content, ignores overlaps that look deliberate (fixed headers, positioned elements with a
+z-index, small badges), and keeps a fix only if it lowers the number of problems on the page. It
+writes an HTML report with a suggested CSS fix and before/after pictures for each finding. It runs on a
 laptop without a GPU (browser only, no model) and never changes the site.
 
 ```powershell

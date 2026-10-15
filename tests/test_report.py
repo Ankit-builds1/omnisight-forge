@@ -42,7 +42,7 @@ def test_a_clean_page_has_no_findings(page, tmp_path):
 def test_finds_and_pictures_an_overflow(page, tmp_path):
     inject_bug(page, "#two", "width: 900px")
     findings = check_page(page, "desktop", tmp_path)
-    assert [(f.kind, f.property, f.value) for f in findings] == [("overflow", "width", "auto")]
+    assert [(f.kind, f.property, f.value) for f in findings] == [("sticks_out", "width", "auto")]
     assert (tmp_path / findings[0].before).exists()
     assert (tmp_path / findings[0].after).exists()
 

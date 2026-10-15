@@ -388,6 +388,67 @@ def _revert_search(page: Page, selector: str, radius: int, limit: int) -> Repair
 
 HEALERS = {"v2": heal, "v3": heal_v3, "v4": heal_v4}
 
+# v4 symptom names and the known v2 fixes that match them.
+_KNOWN_V4 = {
+    "sticks_out": FIXES["overflow"], "covers": FIXES["overlap"], "spills": FIXES["clipping"],
+}
+
+
+def page_repairs(page: Page, max_repairs: int = 10) -> list[Repair]:
+    """Every problem v4 finds on the page with a fix that removes it, for a report.
+
+    For each sick element the known fixes are tried first, then one revert at a time; a fix
+    counts only if it also lowers the page's symptom count. Accepted fixes stay applied while the
+    search goes on, so a container that only spilled because of a misplaced child is not reported
+    as a second problem. The page is put back as it was at the end.
+    """
+    hits = page.evaluate(_FIND_V4_JS, ["body", PAGE_RADIUS, PAGE_MAX_ELEMENTS])
+    hits.sort(key=lambda hit: (hit["kind"] == "spills", hit["distance"]))
+    repairs: list[Repair] = []
+    applied: list[tuple[str, str, list]] = []
+    try:
+        for hit in hits[:V4_MAX_HITS]:
+            if not page.evaluate(_SICK_V4_JS, [hit["selector"], hit["kind"]]):
+                continue
+            before = page.evaluate(_COUNT_V4_JS)
+            known = _KNOWN_V4[hit["kind"]]
+            for prop, value in [*known, *((prop, "revert") for prop in REVERT_PROPERTIES)]:
+                args = [hit["selector"], hit["kind"], prop, value, before]
+                if page.evaluate(_TRY_V4_JS, args):
+                    repairs.append(
+                        Repair(hit["selector"], prop, value, hit["kind"], hit["distance"])
+                    )
+                    old = page.evaluate(_APPLY_JS, [hit["selector"], prop, value])
+                    applied.append((hit["selector"], prop, old))
+                    break
+            if len(repairs) == max_repairs:
+                break
+    finally:
+        for selector, prop, old in reversed(applied):
+            page.evaluate(_UNDO_JS, [selector, prop, old])
+    return repairs
+
+
+_SICK_V4_JS = (
+    "([sel, kind]) => { //SYMPTOMS//\n return symptoms[kind](document.querySelector(sel)); }"
+    .replace("//SYMPTOMS//", _SYMPTOMS_V4_JS)
+)
+_APPLY_JS = """
+([sel, prop, val]) => {
+  const el = document.querySelector(sel);
+  const old = [el.style.getPropertyValue(prop), el.style.getPropertyPriority(prop)];
+  el.style.setProperty(prop, val, 'important');
+  return old;
+}
+"""
+_UNDO_JS = """
+([sel, prop, old]) => {
+  const el = document.querySelector(sel);
+  if (old[0]) el.style.setProperty(prop, old[0], old[1]);
+  else el.style.removeProperty(prop);
+}
+"""
+
 
 def healed_answer(
     page: Page,
