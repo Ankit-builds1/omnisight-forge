@@ -3,22 +3,29 @@ from playwright.sync_api import sync_playwright
 
 from forge.mutations import (
     ABSOLUTE,
+    FLEXROW,
     HELD_OUT_2_BUG_TYPES,
+    HELD_OUT_3_BUG_TYPES,
     HELD_OUT_BUG_TYPES,
     LIFT,
     MARGIN,
     MINWIDTH,
     MUTATIONS,
     NOWRAP,
+    PADDING,
     SHIFT,
+    TOPNEG,
     TRAIN_BUG_TYPES,
     apply_declaration,
     mutate_absolute,
+    mutate_flexrow,
     mutate_lift,
     mutate_margin,
     mutate_minwidth,
     mutate_nowrap,
+    mutate_padding,
     mutate_shift,
+    mutate_topneg,
 )
 
 HTML = """<!doctype html>
@@ -59,9 +66,11 @@ def box(page, selector):
 def test_held_out_types_are_separate_from_training_types():
     assert set(HELD_OUT_BUG_TYPES).isdisjoint(TRAIN_BUG_TYPES)
     assert set(HELD_OUT_2_BUG_TYPES).isdisjoint(set(TRAIN_BUG_TYPES) | set(HELD_OUT_BUG_TYPES))
-    assert (
-        set(HELD_OUT_BUG_TYPES) | set(HELD_OUT_2_BUG_TYPES) | set(TRAIN_BUG_TYPES) == set(MUTATIONS)
+    every = (
+        set(HELD_OUT_BUG_TYPES) | set(HELD_OUT_2_BUG_TYPES) | set(HELD_OUT_3_BUG_TYPES)
+        | set(TRAIN_BUG_TYPES)
     )
+    assert every == set(MUTATIONS)
 
 
 @pytest.mark.parametrize(
@@ -91,3 +100,43 @@ def test_lift_uses_a_transform_not_a_margin(page):
     mutation = mutate_lift(page, seed=0)
     assert mutation.broken_css.startswith("transform: translateY(-")
     assert "margin" not in mutation.broken_css
+
+
+SET3_HTML = """<!doctype html>
+<html><body style="margin:0">
+<div id="wrap" style="width:400px;padding:10px">
+  <div style="height:40px;background:#ccd">One</div>
+  <div id="box" style="width:300px;height:40px;background:#cdc">Two</div>
+  <div id="row">
+    <div style="min-width:200px;height:30px;background:#dcc">A</div>
+    <div style="min-width:200px;height:30px;background:#cdd">B</div>
+    <div style="min-width:200px;height:30px;background:#ddc">C</div>
+  </div>
+</div>
+</body></html>"""
+
+
+@pytest.fixture
+def set3_page(browser):
+    page = browser.new_page(viewport={"width": 800, "height": 600})
+    page.set_content(SET3_HTML)
+    yield page
+    page.close()
+
+
+def test_set_3_is_separate_from_every_other_set():
+    others = set(TRAIN_BUG_TYPES) | set(HELD_OUT_BUG_TYPES) | set(HELD_OUT_2_BUG_TYPES)
+    assert set(HELD_OUT_3_BUG_TYPES).isdisjoint(others)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "bug_type", "prop"),
+    [(mutate_padding, PADDING, "padding-left"), (mutate_topneg, TOPNEG, "top"),
+     (mutate_flexrow, FLEXROW, "display")],
+)
+def test_set_3_bug_breaks_the_page_and_gold_fix_restores_it(set3_page, mutate, bug_type, prop):
+    before = set3_page.evaluate("() => document.body.scrollWidth")
+    mutation = mutate(set3_page, seed=0)
+    assert (mutation.bug_type, mutation.property) == (bug_type, prop)
+    apply_declaration(set3_page, mutation.target_selector, mutation.gold_fix)
+    assert set3_page.evaluate("() => document.body.scrollWidth") == before

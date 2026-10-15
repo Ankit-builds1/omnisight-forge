@@ -1,7 +1,7 @@
 import pytest
 from playwright.sync_api import sync_playwright
 
-from forge.heal import find_symptoms, heal, heal_v3, healed_answer, scan_page
+from forge.heal import find_symptoms, heal, heal_v3, heal_v4, healed_answer, scan_page
 from forge.mutations import inject_bug
 
 HTML = """<!doctype html>
@@ -136,3 +136,26 @@ def test_healed_answer_replaces_the_property(page):
     answer = {"selector": "#two", "property": "margin-top", "value": "0px"}
     healed = healed_answer(page, answer)
     assert (healed["property"], healed["value"]) == ("width", "auto")
+
+
+def test_v4_uses_a_known_fix_first(page):
+    inject_bug(page, "#three", "width: 900px")
+    repair = heal_v4(page, "body", radius=10)
+    assert (repair.property, repair.value) == ("width", "auto")
+
+
+def test_v4_reverts_when_no_known_fix_works(page):
+    inject_bug(page, "#two", "transform: translateY(-30px)")
+    repair = heal_v4(page, "body", radius=10)
+    assert (repair.property, repair.value) == ("transform", "revert")
+
+
+def test_v4_leaves_an_overlap_that_was_there_on_purpose(page):
+    page.evaluate(
+        """() => {
+          const badge = document.createElement('div');
+          badge.style.cssText = 'position:absolute;top:12px;left:12px;width:60px;height:20px';
+          document.querySelector('#one').after(badge);
+        }"""
+    )
+    assert heal_v4(page, "body", radius=10) is None

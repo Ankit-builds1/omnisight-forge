@@ -422,3 +422,45 @@ Notes:
   reaches one of those first and "repairs" it, so wiki2, svelte and sign-in fall to 0-15%.
 - Text that runs out sideways (NOWRAP) is detected but no revert in the list removes it, because
   the element's own box is unchanged; the spill shows on the text, not the element.
+
+## Healer v4 and the final test on held-out set 3
+
+v4 (`--healer v4`) combines v2 and v3 and adds two rules:
+
+- Overlap that looks deliberate is not a symptom: fixed or sticky elements, positioned elements
+  with a z-index, and positioned overlays smaller than a quarter of the neighbour they cover.
+- Both the known v2 fix and the first v3-style revert are found; each is applied in turn and the
+  one that leaves fewer symptoms on the whole page wins (a tie goes to the known fix). A revert
+  only counts if it lowers the page's symptom count.
+
+Two variants were compared on the development sets (original types and held-out sets 1 and 2);
+held-out set 3 was built and gold-checked before v4 existed and no healer ran on it until v4 was
+frozen:
+
+| | original | held-out 1 | held-out 2 | mean |
+|---|---|---|---|---|
+| v2 | 71% | 0% | 0% | 24% |
+| v3 | 24% | 33% | 43% | 33% |
+| v4, known fix first | **72%** | 34% | 31% | 46% |
+| **v4, known fix and revert compete (frozen)** | 57% | **38%** | **45%** | **47%** |
+
+The competing variant was frozen because it does best on the held-out sets, which is the goal.
+Held-out sets 1 and 2 were used to design v4, so its numbers there are development numbers.
+
+**Final test: held-out set 3**, three bug types no healer was designed against, 104 samples on
+the 9 held-out sites, run once:
+
+| type | broken CSS | gold | v4 |
+|---|---|---|---|
+| PADDING | `padding-left: Npx` widens a fixed-width box | 96% | 33% |
+| TOPNEG | `position: relative; top: -Npx` | 70% | 30% |
+| FLEXROW | `display: flex; flex-wrap: nowrap` on a block container | 100% | 8% |
+| **all** | | **84%** | **25%** |
+
+By site: books 67%, hn 60%, google 43%, mdn 43%, amazonjobs 40%, svelte 25%, sign-in, wiki,
+wiki2 and Flipkart 0%.
+
+**25% of unseen bugs (30% of those the verifier can measure) is the honest number for the
+healer.** It is far below the 72% on the bugs it was built for. FLEXROW stays near zero because
+`display` is not in the revert list: the healer can only undo properties it was told about. On
+large pages (wiki, wiki2, sign-in) it either finds no repair or changes the wrong element.
