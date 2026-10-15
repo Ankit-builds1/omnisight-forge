@@ -1,7 +1,7 @@
 import pytest
 from playwright.sync_api import sync_playwright
 
-from forge.heal import find_symptoms, heal, healed_answer, scan_page
+from forge.heal import find_symptoms, heal, heal_v3, healed_answer, scan_page
 from forge.mutations import inject_bug
 
 HTML = """<!doctype html>
@@ -91,6 +91,31 @@ def test_a_bug_outside_the_radius_is_not_found(page):
 def test_healed_answer_keeps_the_model_answer_when_nothing_is_found(page):
     answer = {"selector": "#two", "property": "margin-top", "value": "0px"}
     assert healed_answer(page, answer) == answer
+
+
+@pytest.mark.parametrize(
+    ("selector", "bug", "prop"),
+    [
+        ("#three", "position: relative; left: 600px", "position"),
+        ("#two", "transform: translateY(-30px)", "transform"),
+        ("#three", "min-width: 900px", "min-width"),
+        ("#three", "margin-left: 500px; width: 300px", "margin-left"),
+    ],
+)
+def test_v3_reverts_the_property_that_causes_the_symptom(page, selector, bug, prop):
+    inject_bug(page, selector, bug)
+    repair = heal_v3(page, "body", radius=10)
+    assert (repair.property, repair.value) == (prop, "revert")
+
+
+def test_v3_finds_nothing_on_a_clean_page(page):
+    assert heal_v3(page, "body", radius=10) is None
+
+
+def test_v3_leaves_the_page_as_it_was(page):
+    inject_bug(page, "#three", "min-width: 900px")
+    heal_v3(page, "body", radius=10)
+    assert width(page, "#three") == 900
 
 
 def test_scan_page_finds_a_bug_without_any_model(page):
